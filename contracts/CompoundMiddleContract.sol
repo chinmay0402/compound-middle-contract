@@ -13,6 +13,14 @@ interface Erc20 {
 interface CErc20 {
     function mint(uint256) external returns (uint256);
 
+    function exchangeRateCurrent() external returns (bool);
+
+    function supplyRatePerBlock() external returns (uint256);
+
+    function redeem(uint) external returns (uint);
+
+    function redeemUnderlying(uint) external returns (uint);
+
     function borrow(uint256) external returns (uint256);
 
     function borrowRatePerBlock() external view returns (uint256); 
@@ -103,14 +111,14 @@ contract CompoundMiddleContract {
      */
     function withdrawEth(
         uint256 _redeemAmount,
-        uint256 _redeemType,
+        bool _redeemType,
         address _cEtherAddress
     ) external returns (bool) {
         CEth cEth = CEth(_cEtherAddress);
 
         uint256 redeemResult;
 
-        if (_redeemType == 1) {
+        if (_redeemType) {
             require(
                 cEth.balanceOf(address(this)) >= _redeemAmount,
                 "NOT ENOUGH cTOKENS"
@@ -138,7 +146,9 @@ contract CompoundMiddleContract {
             );
         }
 
-        return redeemResult == 0 ? true : false;
+        require(redeemResult == 0, "ERROR WHILE REDEEMING");
+
+        return true;
     }
 
     /**
@@ -213,6 +223,64 @@ contract CompoundMiddleContract {
         cEth.repayBorrow{value: amount}();
 
         console.log("Repayed %s ether", amount);
+
+        return true;
+    }
+
+    /**
+     * @dev deposits erc20 tokens to Compound, mints cTokens 
+     * @param _erc20Contract address of the erc20 token contract
+     * @param _cErc20Contract address of the Compound contract for cTokens 
+     * @param _numTokensToSupply number of erc20 tokens to deposit
+     * @return uint256 0 on successful transaction, otherwise error code
+    */
+    function depositErc20(
+        address _erc20Contract, 
+        address _cErc20Contract, 
+        uint256 _numTokensToSupply
+    ) external returns (uint256) {
+        // create references to the contracts on mainnet
+        Erc20 underlying = Erc20(_erc20Contract);
+        CErc20 cToken = CErc20(_cErc20Contract);
+
+        // Approve transfer on the ERC20 contract
+        underlying.approve(_cErc20Contract, _numTokensToSupply);
+
+        // supply the tokens to Compound and mint cTokens
+        uint mintResult = cToken.mint(_numTokensToSupply);
+
+        return mintResult;
+    }
+
+    /**
+     * @dev withdraws erc20 tokens from Compound
+     * @param _cErc20Contract address of the cErc20 contract on Compound
+     * @param _redeemType can be true or false, decides the mode of withdrawal
+                          true: withdraw by giving cTokens
+                          false: withdraw by telling the amount of tokens needed
+     * @param amount can be number of cTokens or amount of erc20 tokens depending upon _redeemType
+     * @return bool status of transaction
+    */
+    function withdrawErc20 (
+        address _cErc20Contract,
+        bool _redeemType,
+        uint256 amount
+    ) external returns (bool) {
+        // Create a reference to the cToken contract
+        CErc20 cToken = CErc20(_cErc20Contract);
+
+        uint256 redeemResult;
+
+        if(_redeemType == true) {
+            // Retrieve asset based on cToken amount
+            redeemResult = cToken.redeem(amount); 
+        }
+        else{
+            // Retrieve asset based on amount of asset
+            redeemResult = cToken.redeemUnderlying(amount); 
+        }
+
+        require(redeemResult == 0, "ERROR WHILE REDEEMING");
 
         return true;
     }
