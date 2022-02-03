@@ -7,4 +7,5 @@ A smart contract that acts as a middle layer and allows user to interact with th
     2. Other ECR20 tokens
 2. Transfer back the received Eth to user
 3. Transfer back the received ERC20 tokens to user
-4. Handle edge cases while borrowing (eg.- over-borrowing)
+4. Write tests
+5. Handle edge cases while borrowing (eg.- over-borrowing)
