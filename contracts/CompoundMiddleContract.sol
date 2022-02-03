@@ -285,6 +285,25 @@ contract CompoundMiddleContract {
         return true;
     }
 
+    function borrowErc20WithEth (
+        address payable _cEtherContract,
+        address _erc20Contract,
+        address _comptrollerAddress,
+        address _cTokenAddress,
+        uint256 _underlyingDecimals
+    ) external payable returns (bool) {
+        // Create references to Compound and Token contracts
+        
+
+        // Deposit Eth as collateral
+
+        // enter market with Eth
+
+        // borrow
+
+        // get borrow balance
+    }
+
     /**
      *@dev fallback function to accept ether when borrowEth is called
      */
