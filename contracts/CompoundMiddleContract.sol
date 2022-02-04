@@ -3,78 +3,18 @@
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
-
-interface Erc20 {
-    function approve(address, uint256) external returns (bool);
-
-    function transfer(address, uint256) external returns (bool);
-}
-
-interface CErc20 {
-    function mint(uint256) external returns (uint256);
-
-    function exchangeRateCurrent() external returns (bool);
-
-    function supplyRatePerBlock() external returns (uint256);
-
-    function redeem(uint256) external returns (uint256);
-
-    function redeemUnderlying(uint256) external returns (uint256);
-
-    function borrow(uint256) external returns (uint256);
-
-    function borrowRatePerBlock() external view returns (uint256);
-
-    function borrowBalanceCurrent(address) external view returns (uint256); // current borrowed amount + due interest
-
-    function repayBorrow(uint256) external returns (uint256);
-}
-
-interface CEth {
-    function mint() external payable; // to deposit to compound
-
-    function redeem(uint256) external returns (uint256); // to withdraw from compound on basis of cEth tokens
-
-    function redeemUnderlying(uint256) external returns (uint256); // to withdraw from compound on basis of underlying asset amount
-
-    function exchangeRateCurrent() external returns (uint256);
-
-    function balanceOf(address) external view returns (uint256); // to get balance of cEth tokens of the contract
-
-    function borrow(uint256) external returns (uint256);
-
-    function borrowBalanceCurrent(address) external returns (uint256);
-
-    function repayBorrow() external payable; // payable since receives eth
-}
-
-interface Comptroller {
-    // Comptroller is the risk-management layer of the (Compound) protocol
-    function markets(address) external returns (bool, uint256);
-
-    function enterMarkets(address[] calldata)
-        external
-        returns (uint256[] memory);
-
-    function getAccountLiquidity(address)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
-}
-
-interface PriceFeed {
-    function getUnderlyingPrice(address cToken) external view returns (uint256);
-}
+import "./interfaces/Compound.sol";
+import "./interfaces/Erc20.sol";
 
 contract CompoundMiddleContract {
     address private owner; // required to send the received eth back to the user
 
     constructor() {
         owner = msg.sender; // sets contract owner
+    }
+
+    function getOwner() view external returns (address) {
+        return owner;
     }
 
     /**
@@ -124,8 +64,9 @@ contract CompoundMiddleContract {
         );
 
         redeemResult = cEth.redeem(_redeemAmount);
-        uint256 amountOfEthreceived = _redeemAmount *
-            cEth.exchangeRateCurrent();
+        require(redeemResult == 0, "ERROR WHILE REDEEMING");
+        
+        uint256 amountOfEthreceived = _redeemAmount * cEth.exchangeRateCurrent();
 
         console.log(
             "Redeemed %s cEth for %s ether",
@@ -133,7 +74,8 @@ contract CompoundMiddleContract {
             amountOfEthreceived
         );
 
-        require(redeemResult == 0, "ERROR WHILE REDEEMING");
+        (bool success, ) = owner.call{ value: address(this).balance }("");
+        require(success, "FAILURE, ETHER NOT SENT");
 
         return true;
     }
@@ -189,10 +131,14 @@ contract CompoundMiddleContract {
         console.log("Liquidity available", liquidity); // liquidity is the USD value borrowable by the user, before it reaches liquidation
 
         // borrow
-        cEth.borrow(_amountToBorrowInWei);
+        require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
         uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
 
         console.log("Borrowed %s eth", _amountToBorrowInWei / 18);
+
+        (bool success, ) = owner.call{ value: address(this).balance }("");
+
+        require(success, "FAILURE, ETHER NOT SENT");
 
         return borrowBalance;
     }
@@ -200,18 +146,16 @@ contract CompoundMiddleContract {
     /**
      * @dev repays borrowed eth
      * @param _cEtherAddress address of the cEth contract in Compound
-     * @param amount amount of ether to be repayed
      * @return uint256 updated borrow balance of the user
      */
     function paybackEth(
         address _cEtherAddress,
-        uint256 amount,
         uint256 gas
-    ) public returns (uint256) {
+    ) public payable returns (uint256) {
         CEth cEth = CEth(_cEtherAddress);
-        cEth.repayBorrow{value: amount, gas: gas}();
+        cEth.repayBorrow{value: msg.value, gas: gas}();
 
-        console.log("Repayed %s ether", amount);
+        console.log("Repayed %s ether", msg.value);
 
         return cEth.borrowBalanceCurrent(address(this));
     }
@@ -348,7 +292,5 @@ contract CompoundMiddleContract {
     /**
      *@dev fallback function to accept ether when borrowEth is called and send the eth back to owner
      */
-    receive() external payable {
-        payable(owner).transfer(msg.value);
-    }
+    receive() external payable {}
 }
