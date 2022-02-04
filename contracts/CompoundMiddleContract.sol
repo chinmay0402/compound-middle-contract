@@ -17,13 +17,13 @@ interface CErc20 {
 
     function supplyRatePerBlock() external returns (uint256);
 
-    function redeem(uint) external returns (uint);
+    function redeem(uint256) external returns (uint256);
 
-    function redeemUnderlying(uint) external returns (uint);
+    function redeemUnderlying(uint256) external returns (uint256);
 
     function borrow(uint256) external returns (uint256);
 
-    function borrowRatePerBlock() external view returns (uint256); 
+    function borrowRatePerBlock() external view returns (uint256);
 
     function borrowBalanceCurrent(address) external view returns (uint256); // current borrowed amount + due interest
 
@@ -71,7 +71,11 @@ interface PriceFeed {
 }
 
 contract CompoundMiddleContract {
-    address cEtherContract = 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5; // address of the cEtherContract on Ethereum Mainnet
+    address private owner; // required to send the received eth back to the user
+
+    constructor() {
+        owner = msg.sender; // sets contract owner
+    }
 
     /**
      * @dev deposits Ether to Compound protocol
@@ -103,48 +107,31 @@ contract CompoundMiddleContract {
     /**
      * @dev withdraws ether deposited to compound
             uses redeem() and redeemUnderlying() methods in CEth contract
-     * @param _redeemAmount depending upon _redeemType, the number of cTokens or the amount of underlying assest to be redeemed
-     * @param _redeemType basis on which eth is to be redeemed (can be 0 or 1)
-                          0 denotes that the parameter _redeemAmount denotes the nubmer of cTokens that are to be redeemed
-                          1 denotes that the parameter _redeemAmount denotes the amount of underlying assest that is to be redeemed
+     * @param _redeemAmount the number of cTokens to be redeemed
      * @return bool status of transaction
      */
     function withdrawEth(
         uint256 _redeemAmount,
-        bool _redeemType,
         address _cEtherAddress
     ) external returns (bool) {
         CEth cEth = CEth(_cEtherAddress);
 
         uint256 redeemResult;
 
-        if (_redeemType) {
-            require(
-                cEth.balanceOf(address(this)) >= _redeemAmount,
-                "NOT ENOUGH cTOKENS"
-            );
-            redeemResult = cEth.redeem(_redeemAmount);
-            uint256 amountOfEthreceived = _redeemAmount *
-                cEth.exchangeRateCurrent();
-            console.log(
-                "Redeemed %s cEth for %s ether",
-                _redeemAmount,
-                amountOfEthreceived
-            );
-        } else {
-            uint256 cTokensRedeemed = _redeemAmount /
-                cEth.exchangeRateCurrent();
-            require(
-                cTokensRedeemed >= cEth.balanceOf(address(this)),
-                "NOT ENOUGH cTOKENS"
-            );
-            redeemResult = cEth.redeemUnderlying(_redeemAmount);
-            console.log(
-                "received %s ether for %s cEth",
-                _redeemAmount,
-                cTokensRedeemed
-            );
-        }
+        require(
+            cEth.balanceOf(address(this)) >= _redeemAmount,
+            "NOT ENOUGH cTOKENS"
+        );
+
+        redeemResult = cEth.redeem(_redeemAmount);
+        uint256 amountOfEthreceived = _redeemAmount *
+            cEth.exchangeRateCurrent();
+
+        console.log(
+            "Redeemed %s cEth for %s ether",
+            _redeemAmount,
+            amountOfEthreceived
+        );
 
         require(redeemResult == 0, "ERROR WHILE REDEEMING");
 
@@ -158,6 +145,7 @@ contract CompoundMiddleContract {
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _underlyingAddress address of contract of the token to be supplied as collateral
      * @param _underlyingToSupplyAsCollateral amount of tokens to supply as collateral
+     * @param _amountToBorrowInWei amount of ether to be borrowed in wei
      * @return uint256 the current borrow balance of the user
      */
     function borrowEth(
@@ -165,7 +153,8 @@ contract CompoundMiddleContract {
         address _comptrollerAddress,
         address _cTokenAddress,
         address _underlyingAddress,
-        uint256 _underlyingToSupplyAsCollateral
+        uint256 _underlyingToSupplyAsCollateral,
+        uint256 _amountToBorrowInWei
     ) public returns (uint256) {
         // declare references to external contracts
         CEth cEth = CEth(_cEtherAddress);
@@ -200,11 +189,10 @@ contract CompoundMiddleContract {
         console.log("Liquidity available", liquidity); // liquidity is the USD value borrowable by the user, before it reaches liquidation
 
         // borrow
-        uint256 amountToBorrowInWei = 2000000000000000; // CHANGE
-        cEth.borrow(amountToBorrowInWei);
+        cEth.borrow(_amountToBorrowInWei);
         uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
 
-        console.log("Borrowed %s eth", amountToBorrowInWei / 18);
+        console.log("Borrowed %s eth", _amountToBorrowInWei / 18);
 
         return borrowBalance;
     }
@@ -213,30 +201,31 @@ contract CompoundMiddleContract {
      * @dev repays borrowed eth
      * @param _cEtherAddress address of the cEth contract in Compound
      * @param amount amount of ether to be repayed
-     * @return bool status of transaction
+     * @return uint256 updated borrow balance of the user
      */
-    function paybackEth(address _cEtherAddress, uint256 amount)
-        public
-        returns (bool)
-    {
+    function paybackEth(
+        address _cEtherAddress,
+        uint256 amount,
+        uint256 gas
+    ) public returns (uint256) {
         CEth cEth = CEth(_cEtherAddress);
-        cEth.repayBorrow{value: amount}();
+        cEth.repayBorrow{value: amount, gas: gas}();
 
         console.log("Repayed %s ether", amount);
 
-        return true;
+        return cEth.borrowBalanceCurrent(address(this));
     }
 
     /**
-     * @dev deposits erc20 tokens to Compound, mints cTokens 
+     * @dev deposits erc20 tokens to Compound, mints cTokens
      * @param _erc20Contract address of the erc20 token contract
-     * @param _cErc20Contract address of the Compound contract for cTokens 
+     * @param _cErc20Contract address of the Compound contract for cTokens
      * @param _numTokensToSupply number of erc20 tokens to deposit
      * @return uint256 0 on successful transaction, otherwise error code
-    */
+     */
     function depositErc20(
-        address _erc20Contract, 
-        address _cErc20Contract, 
+        address _erc20Contract,
+        address _cErc20Contract,
         uint256 _numTokensToSupply
     ) external returns (uint256) {
         // create references to the contracts on mainnet
@@ -247,7 +236,7 @@ contract CompoundMiddleContract {
         underlying.approve(_cErc20Contract, _numTokensToSupply);
 
         // supply the tokens to Compound and mint cTokens
-        uint mintResult = cToken.mint(_numTokensToSupply);
+        uint256 mintResult = cToken.mint(_numTokensToSupply);
 
         return mintResult;
     }
@@ -255,57 +244,111 @@ contract CompoundMiddleContract {
     /**
      * @dev withdraws erc20 tokens from Compound
      * @param _cErc20Contract address of the cErc20 contract on Compound
-     * @param _redeemType can be true or false, decides the mode of withdrawal
-                          true: withdraw by giving cTokens
-                          false: withdraw by telling the amount of tokens needed
-     * @param amount can be number of cTokens or amount of erc20 tokens depending upon _redeemType
+     * @param _erc20Contract address of the erc20 token
+     * @param _amount can be number of cTokens or amount of erc20 tokens depending upon _redeemType
      * @return bool status of transaction
-    */
-    function withdrawErc20 (
-        address _cErc20Contract,
-        bool _redeemType,
-        uint256 amount
+     */
+    function withdrawErc20(
+        address _cErc20Contract, 
+        address _erc20Contract, 
+        uint256 _amount
     ) external returns (bool) {
         // Create a reference to the cToken contract
         CErc20 cToken = CErc20(_cErc20Contract);
+        Erc20 token = Erc20(_erc20Contract);
 
         uint256 redeemResult;
 
-        if(_redeemType == true) {
-            // Retrieve asset based on cToken amount
-            redeemResult = cToken.redeem(amount); 
-        }
-        else{
-            // Retrieve asset based on amount of asset
-            redeemResult = cToken.redeemUnderlying(amount); 
-        }
+        // Retrieve asset based on cToken amount
+        redeemResult = cToken.redeem(_amount);
 
         require(redeemResult == 0, "ERROR WHILE REDEEMING");
+
+        token.transfer(msg.sender, _amount);
 
         return true;
     }
 
-    function borrowErc20WithEth (
-        address payable _cEtherContract,
-        address _erc20Contract,
+    /**
+     * @dev borrows erc20 token with ether as collateral
+     * @param _cEtherAddress address of cEther contract in Compound
+     * @param _erc20Address address of erc20 token contract
+     * @param _comptrollerAddress address of comptroller contract in Compound
+     * @param _amountToBorrow amount of erc20 tokens to borrow
+     * @return uint256 borrowBalance of the user
+     */
+    function borrowErc20WithEth(
+        address payable _cEtherAddress,
+        address _erc20Address,
         address _comptrollerAddress,
         address _cTokenAddress,
-        uint256 _underlyingDecimals
-    ) external payable returns (bool) {
+        uint256 _amountToBorrow
+    ) external payable returns (uint256) {
         // Create references to Compound and Token contracts
-        
+        CEth cEth = CEth(_cEtherAddress);
+        CErc20 cToken = CErc20(_cTokenAddress);
+        Erc20 token = Erc20(_erc20Address);
+        Comptroller comptroller = Comptroller(_comptrollerAddress);
 
         // Deposit Eth as collateral
+        cEth.mint{value: msg.value, gas: 250000}();
 
         // enter market with Eth
+        address[] memory cTokens = new address[](1);
+        cTokens[0] = _cEtherAddress;
+        uint256[] memory errors = comptroller.enterMarkets(cTokens);
+        require(errors[0] == 0, "Comptroller.enterMarkets FAILED");
+
+        (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller
+            .getAccountLiquidity(address(this));
+        require(error2 == 0, "comptroller.getAccountLiquidity FAILED");
+        require(shortfall == 0, "account underwater");
+        require(liquidity > 0, "account has excess collateral");
+
+        console.log("Liquidity available", liquidity);
 
         // borrow
+        uint256 borrowStatus = cToken.borrow(_amountToBorrow);
+        require(borrowStatus == 0, "BORROW FAILED");
 
         // get borrow balance
+        uint256 borrowBalance = cToken.borrowBalanceCurrent(address(this));
+
+        // transfer borrowed erc20 to user
+        token.transfer(owner, _amountToBorrow);
+
+        return borrowBalance;
     }
 
     /**
-     *@dev fallback function to accept ether when borrowEth is called
+     * @dev repays erc20 tokens to Compound
+     * @param _cErc20Address address of cErc20 contract in Compound
+     * @param _erc20Address address of the erc20 token contract
+     * @param _repayAmount number of erc20 tokens to be repayed
+     * @return uint256 updated borrowBalance for the erc20 token
      */
-    receive() external payable {}
+    function paybackErc20(
+        address _cErc20Address,
+        address _erc20Address,
+        uint256 _repayAmount
+    ) external returns (uint256) {
+        // create references to contracts
+        CErc20 cToken = CErc20(_cErc20Address);
+        Erc20 token = Erc20(_erc20Address);
+        
+        // approve Compound to spend erc20 tokens
+        token.approve(_cErc20Address, _repayAmount);
+
+        // repay borrow
+        cToken.repayBorrow(_repayAmount);
+
+        return cToken.borrowBalanceCurrent(address(this));
+    }
+
+    /**
+     *@dev fallback function to accept ether when borrowEth is called and send the eth back to owner
+     */
+    receive() external payable {
+        payable(owner).transfer(msg.value);
+    }
 }
