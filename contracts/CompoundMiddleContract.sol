@@ -4,9 +4,12 @@ pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
 import "./interfaces/Compound.sol";
-import "./interfaces/Erc20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract CompoundMiddleContract {
+    using SafeERC20 for IERC20;
+
     address private owner; // required to send the received eth back to the user
 
     constructor() {
@@ -20,6 +23,7 @@ contract CompoundMiddleContract {
     /**
      * @dev deposits Ether to Compound protocol
             uses the mint() method in CEth contract
+     * @param _cEtherAddress address of the cEth contract of Compound
      * @return bool denoting status of transaction (success/failure)
      */
     // function receives ether from the wallet of the user, thus payable
@@ -48,6 +52,7 @@ contract CompoundMiddleContract {
      * @dev withdraws ether deposited to compound
             uses redeem() and redeemUnderlying() methods in CEth contract
      * @param _redeemAmount the number of cTokens to be redeemed
+     * @param _cEtherAddress address of cEth contract on Compound
      * @return bool status of transaction
      */
     function withdrawEth(
@@ -85,8 +90,8 @@ contract CompoundMiddleContract {
      * @param _cEtherAddress address of the cEther contract in Compound
      * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _cTokenAddress address of the cToken contract in Compound
-     * @param _underlyingAddress address of contract of the token to be supplied as collateral
-     * @param _underlyingToSupplyAsCollateral amount of tokens to supply as collateral
+     * @param _erc20Address address of contract of the token to be supplied as collateral
+     * @param _erc20TokenToSupplyAsCollateral amount of tokens to supply as collateral
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
      * @return uint256 the current borrow balance of the user
      */
@@ -94,15 +99,14 @@ contract CompoundMiddleContract {
         address payable _cEtherAddress,
         address _comptrollerAddress,
         address _cTokenAddress,
-        address _underlyingAddress,
-        uint256 _underlyingToSupplyAsCollateral,
+        address _erc20Address,
+        uint256 _erc20TokenToSupplyAsCollateral,
         uint256 _amountToBorrowInWei
     ) public returns (uint256) {
         // declare references to external contracts
         CEth cEth = CEth(_cEtherAddress);
         Comptroller comptroller = Comptroller(_comptrollerAddress);
         CErc20 cToken = CErc20(_cTokenAddress);
-        Erc20 underlying = Erc20(_underlyingAddress);
 
         require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
 
@@ -115,8 +119,8 @@ contract CompoundMiddleContract {
 
         console.log(
             "Placed %s tokens (%s) as collateral",
-            _underlyingToSupplyAsCollateral,
-            _underlyingAddress
+            _erc20TokenToSupplyAsCollateral,
+            _erc20Address
         );
 
         (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller.getAccountLiquidity(address(this));
@@ -169,13 +173,13 @@ contract CompoundMiddleContract {
         uint256 _numTokensToSupply
     ) external returns (uint256) {
         // create references to the contracts on mainnet
-        Erc20 token = Erc20(_erc20Contract);
+        IERC20 token = IERC20(_erc20Contract);
         CErc20 cToken = CErc20(_cErc20Contract);
 
-        token.transferFrom(msg.sender, address(this), _numTokensToSupply);
+        token.safeTransferFrom(msg.sender, address(this), _numTokensToSupply);
 
         // Approve transfer on the ERC20 contract
-        token.approve(_cErc20Contract, _numTokensToSupply);
+        token.safeApprove(_cErc20Contract, _numTokensToSupply);
 
         // supply the tokens to Compound and mint cTokens
         uint256 mintResult = cToken.mint(_numTokensToSupply);
@@ -197,7 +201,7 @@ contract CompoundMiddleContract {
     ) external returns (bool) {
         // Create a reference to the cToken contract
         CErc20 cToken = CErc20(_cErc20Contract);
-        Erc20 token = Erc20(_erc20Contract);
+        IERC20 token = IERC20(_erc20Contract);
 
         uint256 redeemResult;
 
@@ -206,7 +210,7 @@ contract CompoundMiddleContract {
 
         require(redeemResult == 0, "ERROR WHILE REDEEMING");
 
-        token.transfer(msg.sender, _amount);
+        token.safeTransfer(msg.sender, _amount);
 
         return true;
     }
@@ -229,7 +233,7 @@ contract CompoundMiddleContract {
         // Create references to Compound and Token contracts
         CEth cEth = CEth(_cEtherAddress);
         CErc20 cToken = CErc20(_cTokenAddress);
-        Erc20 token = Erc20(_erc20Address);
+        IERC20 token = IERC20(_erc20Address);
         Comptroller comptroller = Comptroller(_comptrollerAddress);
 
         // Deposit Eth as collateral
@@ -256,7 +260,7 @@ contract CompoundMiddleContract {
         uint256 borrowBalance = cToken.borrowBalanceCurrent(address(this));
 
         // transfer borrowed erc20 to user
-        token.transfer(owner, _amountToBorrow);
+        token.safeTransfer(owner, _amountToBorrow);
 
         return borrowBalance;
     }
@@ -275,12 +279,13 @@ contract CompoundMiddleContract {
     ) external returns (uint256) {
         // create references to contracts
         CErc20 cToken = CErc20(_cErc20Address);
-        Erc20 token = Erc20(_erc20Address);
-        
-        token.transferFrom(msg.sender, address(this), _repayAmount);
+        IERC20 token = IERC20(_erc20Address);
+
+        // transfer user's tokens to contract
+        token.safeTransferFrom(msg.sender, address(this), _repayAmount);
 
         // approve Compound to spend erc20 tokens
-        token.approve(_cErc20Address, _repayAmount);
+        token.safeApprove(_cErc20Address, _repayAmount);
 
         // repay borrow
         cToken.repayBorrow(_repayAmount);
