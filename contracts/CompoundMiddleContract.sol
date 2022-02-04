@@ -109,6 +109,8 @@ contract CompoundMiddleContract {
         uint256 error = cToken.mint(_underlyingToSupplyAsCollateral);
         require(error == 0, "cERC20 MINT ERROR");
 
+        require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
+
         // enter the market with the cTokens received (to make the above supplied tokens collateral)
         address[] memory cTokens = new address[](1); // 1 is the array length
         // cTokens is the list of tokens for which the market is to be entered
@@ -235,7 +237,7 @@ contract CompoundMiddleContract {
         Comptroller comptroller = Comptroller(_comptrollerAddress);
 
         // Deposit Eth as collateral
-        cEth.mint{value: msg.value, gas: 250000}();
+        require(cEth.balanceOf(address(this)) > 0, "DEPOSIT ETHER FIRST");
 
         // enter market with Eth
         address[] memory cTokens = new address[](1);
@@ -243,13 +245,12 @@ contract CompoundMiddleContract {
         uint256[] memory errors = comptroller.enterMarkets(cTokens);
         require(errors[0] == 0, "Comptroller.enterMarkets FAILED");
 
-        (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller
-            .getAccountLiquidity(address(this));
+        (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller.getAccountLiquidity(address(this));
         require(error2 == 0, "comptroller.getAccountLiquidity FAILED");
         require(shortfall == 0, "account underwater");
         require(liquidity > 0, "account has excess collateral");
 
-        console.log("Liquidity available", liquidity);
+        console.log("Liquidity available: ", liquidity);
 
         // borrow
         uint256 borrowStatus = cToken.borrow(_amountToBorrow);

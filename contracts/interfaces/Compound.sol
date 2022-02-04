@@ -12,6 +12,8 @@ interface CErc20 {
     function redeem(uint256) external returns (uint256);
 
     function redeemUnderlying(uint256) external returns (uint256);
+    
+    function balanceOf(address) external view returns (uint256); // to get balance of cEth tokens of the contract
 
     function borrow(uint256) external returns (uint256);
 
