@@ -119,8 +119,7 @@ contract CompoundMiddleContract {
             _underlyingAddress
         );
 
-        (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller
-            .getAccountLiquidity(address(this));
+        (uint256 error2, uint256 liquidity, uint256 shortfall) = comptroller.getAccountLiquidity(address(this));
         require(error2 == 0, "comptroller.getAccountLiquidity FAILED");
         require(shortfall == 0, "account underwater");
         require(liquidity > 0, "account has excess collateral");
@@ -170,11 +169,13 @@ contract CompoundMiddleContract {
         uint256 _numTokensToSupply
     ) external returns (uint256) {
         // create references to the contracts on mainnet
-        Erc20 underlying = Erc20(_erc20Contract);
+        Erc20 token = Erc20(_erc20Contract);
         CErc20 cToken = CErc20(_cErc20Contract);
 
+        token.transferFrom(msg.sender, address(this), _numTokensToSupply);
+
         // Approve transfer on the ERC20 contract
-        underlying.approve(_cErc20Contract, _numTokensToSupply);
+        token.approve(_cErc20Contract, _numTokensToSupply);
 
         // supply the tokens to Compound and mint cTokens
         uint256 mintResult = cToken.mint(_numTokensToSupply);
@@ -276,6 +277,8 @@ contract CompoundMiddleContract {
         CErc20 cToken = CErc20(_cErc20Address);
         Erc20 token = Erc20(_erc20Address);
         
+        token.transferFrom(msg.sender, address(this), _repayAmount);
+
         // approve Compound to spend erc20 tokens
         token.approve(_cErc20Address, _repayAmount);
 
