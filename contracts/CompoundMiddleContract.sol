@@ -104,11 +104,6 @@ contract CompoundMiddleContract {
         CErc20 cToken = CErc20(_cTokenAddress);
         Erc20 underlying = Erc20(_underlyingAddress);
 
-        // supply collateral
-        underlying.approve(_cTokenAddress, _underlyingToSupplyAsCollateral);
-        uint256 error = cToken.mint(_underlyingToSupplyAsCollateral);
-        require(error == 0, "cERC20 MINT ERROR");
-
         require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
 
         // enter the market with the cTokens received (to make the above supplied tokens collateral)
