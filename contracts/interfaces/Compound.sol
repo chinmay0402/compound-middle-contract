@@ -60,6 +60,7 @@ interface Comptroller {
         );
 }
 
-interface PriceFeed {
-    function getUnderlyingPrice(address cToken) external view returns (uint256);
+interface UniswapAnchoredView {
+    function price(string memory symbol) external view returns (uint);
+    function getUnderlyingPrice(address cToken) external view returns (uint);
 }
