@@ -15,11 +15,13 @@ interface CErc20 {
     
     function balanceOf(address) external view returns (uint256); // to get balance of cEth tokens of the contract
 
+    function balanceOfUnderlying(address) external returns (uint);
+
     function borrow(uint256) external returns (uint256);
 
     function borrowRatePerBlock() external view returns (uint256);
 
-    function borrowBalanceCurrent(address) external view returns (uint256); // current borrowed amount + due interest
+    function borrowBalanceCurrent(address) external returns (uint256); // current borrowed amount + due interest
 
     function repayBorrow(uint256) external returns (uint256);
 }
