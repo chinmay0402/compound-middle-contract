@@ -191,7 +191,7 @@ contract CompoundMiddleContract {
         token.safeTransferFrom(msg.sender, address(this), _numTokensToSupply);
         // Approve transfer on the ERC20 contract
        
-        token.safeIncreaseAllowance(_cErc20Contract, _numTokensToSupply);
+        token.safeApprove(_cErc20Contract, _numTokensToSupply);
 
         // supply the tokens to Compound and mint cTokens
         require(cToken.mint(_numTokensToSupply) == 0, "TOKEN DEPOSIT FAILED");
