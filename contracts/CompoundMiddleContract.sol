@@ -238,33 +238,33 @@ contract CompoundMiddleContract {
 
     /**
      * @dev borrows erc20 token with ether as collateral
-     * @param _cEtherAddress address of cEther contract in Compound
+     * @param _cTokenDepAddress address of cToken (or cEther) contract in Compound (which is to be kept as collateral)
      * @param _erc20Address address of erc20 token contract
      * @param _comptrollerAddress address of comptroller contract in Compound
      * @param _cTokenAddress address of cToken to borrow
      * @param _amountToBorrow amount of erc20 tokens to borrow
      * @return uint256 borrowBalance of the user
      */
-    function borrowErc20WithEth(
-        address payable _cEtherAddress,
+    function borrowErc20(
+        address _cTokenDepAddress,
         address _erc20Address,
         address _comptrollerAddress,
         address _cTokenAddress,
         uint256 _amountToBorrow
-    ) external payable returns (uint256) {
+    ) external returns (uint256) {
         // Create references to Compound and Token contracts
-        CEth cEth = CEth(_cEtherAddress);
+        CErc20 cTokenDep = CErc20(_cTokenDepAddress);
         CErc20 cToken = CErc20(_cTokenAddress);
         IERC20 token = IERC20(_erc20Address);
         Comptroller comptroller = Comptroller(_comptrollerAddress);
         ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
-        // check if user has previous ETH deposits
-        require(cEth.balanceOf(address(this)) > 0, "DEPOSIT ETHER FIRST");
+        // check if user has previous token/eth deposits
+        require(cTokenDep.balanceOf(address(this)) > 0, "DEPOSIT SAID TOKEN FIRST");
 
         // enter market with Eth
         address[] memory cTokens = new address[](1);
-        cTokens[0] = _cEtherAddress;
+        cTokens[0] = _cTokenDepAddress;
         uint256[] memory errors = comptroller.enterMarkets(cTokens);
         require(errors[0] == 0, "Comptroller.enterMarkets FAILED");
 

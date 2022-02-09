@@ -197,8 +197,8 @@ describe("Compound Middle Contract", function () {
         });
 
         it('Should fail if borrow is attempted without depositing ETH', async () => {
-            await expect(middleContract.borrowErc20WithEth(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0)))
-                    .to.be.revertedWith("DEPOSIT ETHER FIRST");
+            await expect(middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0)))
+                    .to.be.revertedWith("DEPOSIT SAID TOKEN FIRST");
         });
 
         it('Should fail on trying to borrow more amount in tokens than liquidity', async () => {
@@ -206,7 +206,7 @@ describe("Compound Middle Contract", function () {
                 value: parseEther('1')
             })
 
-            await expect(middleContract.borrowErc20WithEth(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('10000', 0)))
+            await expect(middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('10000', 0)))
                     .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -217,7 +217,7 @@ describe("Compound Middle Contract", function () {
                     [owner], [parseEther("-1")]
                 )
 
-            await expect(() => middleContract.borrowErc20WithEth(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0)))
+            await expect(() => middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0)))
                 .to.changeTokenBalances(Dai, [owner, cDai], [parseUnits('100', 0), parseUnits('-100', 0)]);
         });
     });
@@ -236,7 +236,7 @@ describe("Compound Middle Contract", function () {
             });
 
             // borrow dai
-            await middleContract.borrowErc20WithEth(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0));
+            await middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('100', 0));
         });
 
         it('Should fail on trying to repay more than borrowed', async () => {
