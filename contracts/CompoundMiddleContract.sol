@@ -199,14 +199,16 @@ contract CompoundMiddleContract {
         // create references to the contracts on mainnet
         IERC20 token = IERC20(_erc20Contract);
         CErc20 cToken = CErc20(_cErc20Contract);
-
-        token.safeTransferFrom(msg.sender, address(this), _numTokensToSupply);
+        
+        token.safeTransferFrom(owner, address(this), _numTokensToSupply);
         // Approve transfer on the ERC20 contract
        
         token.safeApprove(_cErc20Contract, _numTokensToSupply);
 
         // supply the tokens to Compound and mint cTokens
         require(cToken.mint(_numTokensToSupply) == 0, "TOKEN DEPOSIT FAILED");
+
+        console.log("cToken contract balance: ", cToken.balanceOfUnderlying(address(this)));
         return true;
     }
 
@@ -259,6 +261,8 @@ contract CompoundMiddleContract {
         Comptroller comptroller = Comptroller(_comptrollerAddress);
         ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
+        // console.log("cToken contract balance: ", cToken.balanceOfUnderlying(address(this)));
+
         // check if user has previous token/eth deposits
         require(cTokenDep.balanceOf(address(this)) > 0, "DEPOSIT SAID TOKEN FIRST");
 
@@ -273,12 +277,13 @@ contract CompoundMiddleContract {
         require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
         require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
 
-        console.log("Liquidity available: ", getAccountLiquidityResponse.liquidity);
+        getAccountLiquidityResponse.liquidity = getAccountLiquidityResponse.liquidity * (10**18);
+        // console.log(getAccountLiquidityResponse.liquidity);
 
         // CHECK: IF USER CAN BORROW _amountToBorrow AMOUNT WITH THE CURRENT DEPOSITS
-        UniswapAnchoredView viewPrice = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-        uint borrowAmountInUsd = viewPrice.getUnderlyingPrice(_cTokenAddress) * _amountToBorrow;
-        require(borrowAmountInUsd <= getAccountLiquidityResponse.liquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
+        // console.log(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D).getUnderlyingPrice(_cTokenAddress) * _amountToBorrow);
+        require(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D).getUnderlyingPrice(_cTokenAddress) * _amountToBorrow <= getAccountLiquidityResponse.liquidity
+                , "BORROW FAILED: NOT ENOUGH COLLATERAL");
 
         // borrow
         require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");

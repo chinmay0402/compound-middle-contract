@@ -203,10 +203,10 @@ describe("Compound Middle Contract", function () {
 
         it('Should fail on trying to borrow more amount in tokens than liquidity', async () => {
             await middleContract.depositEth(cEtherAddress, {
-                value: parseEther('1')
+                value: parseEther('0.01')
             })
 
-            await expect(middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('10000', 0)))
+            await expect(middleContract.borrowErc20(cEtherAddress, daiAddress, comptrollerAddress, cDaiAddress, parseUnits('1', 20)))
                     .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -260,5 +260,22 @@ describe("Compound Middle Contract", function () {
                 value: parseEther('1')
             });
         })
-    })
+    });
+
+    describe('Create Leveraged ERC20 Position', async () => {
+        let Dai, cDai;
+        beforeEach(async () => {
+            // seed the user's address with some dai
+            const tokenArtifact = await artifacts.readArtifact("IERC20");
+            Dai = new ethers.Contract(daiAddress, tokenArtifact.abi, ethers.provider);
+            await Dai.connect(owner).approve(middleContract.address, parseUnits("2", 18));
+
+            cDai = new ethers.Contract(cDaiAddress, cDaiAbi, ethers.provider);
+            const leverageContractFactory = await ethers.getContractFactory("Leverage");
+            leverage = await leverageContractFactory.deploy();
+        });
+        it('Should create a leveraged ERC20 position', async () => {
+            await leverage.leverageERC20(cDaiAddress, comptrollerAddress, middleContract.address, daiAddress, parseUnits('1', 18));
+        })
+    });
 });

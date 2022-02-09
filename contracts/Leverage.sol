@@ -44,14 +44,43 @@ contract Leverage {
         require(leverageSuccess == true, "LEVERAGE: LEVERAGE SUPPLY FAILED");
     }
 
+    /**
+     * @dev leverage ERC20 by supplying ERC20 tokens, borrowing the same tokens and depositing the borrowed amount again
+     * @param _cTokenAddress address of cToken to leverage
+     * @param _comptrollerAddress address of Compound comptroller contract
+     * @param _middleContractAddress address of middle contract
+     * @param _erc20Address address of contract of token to be leveraged
+     * @param _depositAmount number of tokens to supply initially
+     */
+    function leverageERC20(
+        address _cTokenAddress, 
+        address _comptrollerAddress, 
+        address payable _middleContractAddress,
+        address _erc20Address,
+        uint256 _depositAmount
+    ) external {
+        // IERC20 token = IERC20(_erc20Address);
+        CompoundMiddleContract middle = CompoundMiddleContract(_middleContractAddress);
 
-    // function leverageERC20(
-    //     address _cTokenAddress, 
-    //     address _comptrollerAddress, 
-    //     address _middleContractAddress
-    // ) external {
+        // supply token
+        bool depositSuccess = middle.depositErc20(_erc20Address, _cTokenAddress, _depositAmount);
 
-    // }
+        require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
+        
+        // calculate maximum borrowable amount for the supplied tokens
+        Comptroller comptroller = Comptroller(_comptrollerAddress);
+        (, uint collateralFactorMantissa, ) = comptroller.markets(_cTokenAddress);
+        uint256 erc20BorrowAmount = (collateralFactorMantissa - 1*(10**17)) * _depositAmount / 10**18; 
+        // borrow amount has been kept a little less than max. allowed to prevent immediate liquidity
+        
+        // borrow the amount
+        middle.borrowErc20(_cTokenAddress, _erc20Address, _comptrollerAddress, _cTokenAddress, erc20BorrowAmount);
+
+        // deposit the borrowed tokens again
+        bool leverageSuccess = middle.depositErc20(_erc20Address, _cTokenAddress, erc20BorrowAmount);
+
+        require(leverageSuccess == true, "LEVERAGE: LEVERAGE SUPPLY FAILED");
+    }
 
     /**
      *@dev fallback function to accept ether when borrowEth is called and send the eth back to owner
