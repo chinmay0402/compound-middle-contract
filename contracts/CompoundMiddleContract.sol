@@ -6,6 +6,7 @@ import "hardhat/console.sol";
 import "./interfaces/Compound.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./Leverage.sol";
 
 contract CompoundMiddleContract {
     using SafeERC20 for IERC20;
@@ -41,7 +42,6 @@ contract CompoundMiddleContract {
     {
         // create reference to cEther contract in Compound
         CEth cEth = CEth(_cEtherAddress);
-
         // msg.value is the amount of ether send to the contract from the wallet when this function was called
         cEth.mint{value: msg.value, gas: 250000}(); // no return, will revert on error
 
@@ -88,14 +88,18 @@ contract CompoundMiddleContract {
      * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
+     * @param _borrowType a bool denoting whether the borrow function was called by the Leverage contract or the user
+     * @param _leverageContractAddress address of the Leverage contract (can be address(0) when _borrowType is false)
      * @return uint256 the current borrow balance of the user
      */
     function borrowEth(
         address payable _cEtherAddress,
         address _comptrollerAddress,
         address _cTokenAddress,
-        uint256 _amountToBorrowInWei
-    ) public returns (uint256) {
+        uint256 _amountToBorrowInWei,
+        bool _borrowType, 
+        address payable _leverageContractAddress
+    ) external returns (uint256) {
         // declare references to external contracts
         CEth cEth = CEth(_cEtherAddress);
         Comptroller comptroller = Comptroller(_comptrollerAddress);
@@ -121,17 +125,19 @@ contract CompoundMiddleContract {
 
         // get current price of ETH from price feed
         UniswapAnchoredView uniView = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-        uint ethPrice = uniView.price("ETH");
-
+        // uint ethPrice = ;
+        // console.log("Eth price: ", ethPrice);
         // liquidity is the maximum amount that can be borrowed in usd
         // convert _amountToBorrowInWei to (scaled) usd
-        uint256 amountToBorrow = _amountToBorrowInWei * ethPrice;
-        
+        // console.log("amountToBorrowInWei: ", _amountToBorrowInWei);
+        // uint256 amountToBorrow = _amountToBorrowInWei * uniView.price("ETH");
+        // console.log("amountToBorrow: ", amountToBorrow/10**6);
+
         // scale liquidity up to maintain precision
         uint256 scaledLiquidity = getAccountLiquidityResponse.liquidity * (10**18);
 
         // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
-        require(amountToBorrow <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
+        require(_amountToBorrowInWei * uniView.price("ETH") <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
 
         // borrow
         // console.log(amountToBorrow, scaledLiquidity);
@@ -140,11 +146,17 @@ contract CompoundMiddleContract {
 
         console.log("Borrowed %s wei", _amountToBorrowInWei);
 
-        // send borrowed ETH to user
         uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
-        (bool success, ) = owner.call{ value: address(this).balance }("");
 
-        require(success, "FAILURE IN SENDING ETHER TO USER");
+        if(_borrowType == true){ // regular borrow
+            (bool success, ) = owner.call{ value: address(this).balance }("");
+            require(success, "FAILURE IN SENDING ETHER TO USER");
+        }
+        else{ // leveraged borrow
+            // send ether to Leverage contract
+            (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
+            require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
+        }
         return borrowBalance;
     }
 
@@ -156,7 +168,7 @@ contract CompoundMiddleContract {
     function paybackEth(
         address _cEtherAddress,
         uint256 gas
-    ) public payable returns (uint256) {
+    ) external payable returns (uint256) {
         CEth cEth = CEth(_cEtherAddress);
         // CHECK: IF msg.value ETH WAS EVEN BORROWED
         require(msg.value <= cEth.borrowBalanceCurrent(address(this)), "REPAY AMOUNT MORE THAN BORROWED AMOUNT");

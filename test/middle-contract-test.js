@@ -4,13 +4,14 @@ const { parseEther, parseUnits } = require("ethers/lib/utils");
 const cDaiAbi = require("./cDaiAbi.js");
 
 describe("Compound Middle Contract", function () {
-    let middleContract;
+    let middleContract, leverage;
     let owner;
 
     const cEtherAddress = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
     const daiAddress = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
     const cDaiAddress = "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643";
     const comptrollerAddress = "0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B";
+    const zeroAddress = "0x0000000000000000000000000000000000000000";
 
     beforeEach(async () => {
         const middleContractFactory = await ethers.getContractFactory("CompoundMiddleContract");
@@ -85,7 +86,7 @@ describe("Compound Middle Contract", function () {
         });
 
         it('Should fail when borrow is attempted without minting tokens', async () => {
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001')))
+            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001'), true, zeroAddress))
                 .to.be.revertedWith("DEPOSIT TOKENS FIRST");
         })
 
@@ -94,7 +95,7 @@ describe("Compound Middle Contract", function () {
                 .to.changeTokenBalance(Dai, cDai, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('1000')))
+            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('1000'), true, zeroAddress))
                 .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -104,7 +105,7 @@ describe("Compound Middle Contract", function () {
 
             // call borrow
             // Note: Getting COMPTROLLER_REJECTED error with BORROW FAILED on increasing borrow amount even though liquidity was enough (debug later)
-            await expect(await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001')))
+            await expect(await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001'), true, zeroAddress))
                 .to.changeEtherBalances(
                     [owner], [parseEther('0.0000000001')]
                 ); //  the ether balance of the user should increase after borrowed amount get transferred
@@ -125,7 +126,7 @@ describe("Compound Middle Contract", function () {
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
-            await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0001'));
+            await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0001'), true, zeroAddress );
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
         });
 
@@ -248,4 +249,16 @@ describe("Compound Middle Contract", function () {
             .to.changeTokenBalances(Dai, [owner, cDai], [parseUnits('-100', 0), parseUnits('100', 0)]);
         });
     });
+
+    describe('Create Leveraged Ether Position', async () => {
+        beforeEach(async () => {
+            const leverageContractFactory = await ethers.getContractFactory("Leverage");
+            leverage = await leverageContractFactory.deploy();
+        })
+        it('Should create a leveraged ETH position', async () => {
+            await leverage.leverageEther(cEtherAddress, comptrollerAddress, middleContract.address, {
+                value: parseEther('1')
+            });
+        })
+    })
 });
