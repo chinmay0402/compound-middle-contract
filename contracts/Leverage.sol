@@ -74,7 +74,7 @@ contract Leverage {
         // borrow amount has been kept a little less than max. allowed to prevent immediate liquidity
         
         // borrow the amount
-        middle.borrowErc20(_cTokenAddress, _erc20Address, _comptrollerAddress, _cTokenAddress, erc20BorrowAmount);
+        middle._leverageErc20(_cTokenAddress, _erc20Address, _comptrollerAddress, _cTokenAddress, erc20BorrowAmount);
 
         // deposit the borrowed tokens again
         bool leverageSuccess = middle.depositErc20(_erc20Address, _cTokenAddress, erc20BorrowAmount);
