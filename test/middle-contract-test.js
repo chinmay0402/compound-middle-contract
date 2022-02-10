@@ -1,7 +1,7 @@
 const { expect, should } = require("chai");
 const { ethers } = require('hardhat');
 const { parseEther, parseUnits } = require("ethers/lib/utils");
-const cDaiAbi = require("./cDaiAbi.js");
+const cDaiAbi = require("./ABIs/cDaiAbi.js");
 
 describe("Compound Middle Contract", function () {
     let middleContract, leverage;

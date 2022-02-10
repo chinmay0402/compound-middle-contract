@@ -5,14 +5,14 @@ pragma solidity ^0.8.0;
 interface CErc20 {
     function mint(uint256) external returns (uint256);
 
-    function exchangeRateCurrent() external returns (bool);
+    function exchangeRateCurrent() external returns (uint256);
 
     function supplyRatePerBlock() external returns (uint256);
 
     function redeem(uint256) external returns (uint256);
 
     function redeemUnderlying(uint256) external returns (uint256);
-    
+
     function balanceOf(address) external view returns (uint256); // to get balance of cEth tokens of the contract
 
     function balanceOfUnderlying(address) external returns (uint);
@@ -37,6 +37,8 @@ interface CEth {
 
     function balanceOf(address) external view returns (uint256); // to get balance of cEth tokens of the contract
 
+    function balanceOfUnderlying(address) external returns (uint);
+
     function borrow(uint256) external returns (uint256);
 
     function borrowBalanceCurrent(address) external returns (uint256);
@@ -51,6 +53,8 @@ interface Comptroller {
     function getAccountLiquidity(address) external view returns (uint256, uint256, uint256);
 
     function markets(address cTokenAddress) external view returns (bool, uint, bool);
+
+    function getAssetsIn(address account) external view returns (address[] memory);
 }
 
 interface UniswapAnchoredView {
