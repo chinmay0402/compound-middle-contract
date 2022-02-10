@@ -88,16 +88,102 @@ contract CompoundMiddleContract {
      * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
-     * @param _borrowType a bool denoting whether the borrow function was called by the Leverage contract or the user
-     * @param _leverageContractAddress address of the Leverage contract (can be address(0) when _borrowType is false)
      * @return uint256 the current borrow balance of the user
      */
     function borrowEth(
         address payable _cEtherAddress,
         address _comptrollerAddress,
         address _cTokenAddress,
+        uint256 _amountToBorrowInWei
+    ) external returns (uint256) {
+        // declare references to external contracts
+        CEth cEth = CEth(_cEtherAddress);
+        Comptroller comptroller = Comptroller(_comptrollerAddress);
+        CErc20 cToken = CErc20(_cTokenAddress);
+        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+
+        require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
+
+        // enter the market with the cTokens received (to make the above supplied tokens collateral)
+        address[] memory cTokens = new address[](1); // 1 is the array length
+        // cTokens is the list of tokens for which the market is to be entered
+        cTokens[0] = _cTokenAddress;
+        uint256[] memory errors = comptroller.enterMarkets(cTokens);
+        require(errors[0] == 0, "Comptroller.enterMarkets FAILED");
+
+        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
+        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
+        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
+        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
+
+        // liquidity is the USD value borrowable by the user, before it reaches liquidation
+        console.log("Liquidity available: ", getAccountLiquidityResponse.liquidity); 
+
+        // get current price of ETH from price feed
+        UniswapAnchoredView uniView = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
+        // uint ethPrice = ;
+        // console.log("Eth price: ", ethPrice);
+        // liquidity is the maximum amount that can be borrowed in usd
+        // convert _amountToBorrowInWei to (scaled) usd
+        // console.log("amountToBorrowInWei: ", _amountToBorrowInWei);
+        // uint256 amountToBorrow = _amountToBorrowInWei * uniView.price("ETH");
+        // console.log("amountToBorrow: ", amountToBorrow/10**6);
+
+        // scale liquidity up to maintain precision
+        uint256 scaledLiquidity = getAccountLiquidityResponse.liquidity * (10**18);
+
+        // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
+        require(_amountToBorrowInWei * uniView.price("ETH") <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
+
+        // borrow
+        // console.log(amountToBorrow, scaledLiquidity);
+        
+        require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
+
+        console.log("Borrowed %s wei", _amountToBorrowInWei);
+
+        uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
+
+        (bool success, ) = owner.call{ value: address(this).balance }("");
+        require(success, "FAILURE IN SENDING ETHER TO USER");
+        
+        return borrowBalance;
+    }
+
+    /**
+     * @dev repays borrowed eth
+     * @param _cEtherAddress address of the cEth contract in Compound
+     * @return uint256 updated borrow balance of the user
+     */
+    function paybackEth(
+        address _cEtherAddress,
+        uint256 gas
+    ) external payable returns (uint256) {
+        CEth cEth = CEth(_cEtherAddress);
+        // CHECK: IF msg.value ETH WAS EVEN BORROWED
+        require(msg.value <= cEth.borrowBalanceCurrent(address(this)), "REPAY AMOUNT MORE THAN BORROWED AMOUNT");
+
+        cEth.repayBorrow{value: msg.value, gas: gas}();
+
+        console.log("Repayed %s ether", msg.value);
+        ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
+        return ethBorrowBalance;
+    }
+
+    /**
+     * @dev borrows Eth from Compound keeping another eth as collateral, used by Leverage contract
+     * @param _cEtherAddress address of the cEther contract in Compound
+     * @param _comptrollerAddress address of the comptroller contract in Compound
+     * @param _cTokenAddress address of the cToken contract in Compound
+     * @param _amountToBorrowInWei amount of ether to be borrowed in wei
+     * @param _leverageContractAddress address of the Leverage contract (can be address(0) when _borrowType is false)
+     * @return uint256 the current borrow balance of the user
+     */
+    function _leverageEth(
+        address payable _cEtherAddress,
+        address _comptrollerAddress,
+        address _cTokenAddress,
         uint256 _amountToBorrowInWei,
-        bool _borrowType, 
         address payable _leverageContractAddress
     ) external returns (uint256) {
         // declare references to external contracts
@@ -148,36 +234,11 @@ contract CompoundMiddleContract {
 
         uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
 
-        if(_borrowType == true){ // regular borrow
-            (bool success, ) = owner.call{ value: address(this).balance }("");
-            require(success, "FAILURE IN SENDING ETHER TO USER");
-        }
-        else{ // leveraged borrow
-            // send ether to Leverage contract
-            (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
-            require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
-        }
+        // send ether to Leverage contract
+        (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
+        require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
+
         return borrowBalance;
-    }
-
-    /**
-     * @dev repays borrowed eth
-     * @param _cEtherAddress address of the cEth contract in Compound
-     * @return uint256 updated borrow balance of the user
-     */
-    function paybackEth(
-        address _cEtherAddress,
-        uint256 gas
-    ) external payable returns (uint256) {
-        CEth cEth = CEth(_cEtherAddress);
-        // CHECK: IF msg.value ETH WAS EVEN BORROWED
-        require(msg.value <= cEth.borrowBalanceCurrent(address(this)), "REPAY AMOUNT MORE THAN BORROWED AMOUNT");
-
-        cEth.repayBorrow{value: msg.value, gas: gas}();
-
-        console.log("Repayed %s ether", msg.value);
-        ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
-        return ethBorrowBalance;
     }
 
     function getEthBorrowBalance() view external returns (uint256) {
@@ -324,6 +385,11 @@ contract CompoundMiddleContract {
 
         // return updated borrowBalance
         return cToken.borrowBalanceCurrent(address(this));
+    }
+
+    function getCDRatioForToken(address _cTokenAddress) external returns (uint256 totalDebt, uint256 totalCollateral) {
+        CErc20 cToken = CErc20(_cTokenAddress);
+        totalDebt = cToken.borrowBalanceCurrent(address(this));
     }
 
     /**

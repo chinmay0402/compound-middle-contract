@@ -36,7 +36,7 @@ contract Leverage {
         uint256 borrowableEthAmount = (collateralFactorMantissa - (1*(10**17))) * supplyEth / 10**18;
         console.log("collateralFactorMantissa: ", (collateralFactorMantissa - (1*(10**17))));
         // borrow the amount
-        middle.borrowEth(_cEtherAddress, _comptrollerAddress, _cEtherAddress, borrowableEthAmount, false, payable(address(this)));
+        middle._leverageEth(_cEtherAddress, _comptrollerAddress, _cEtherAddress, borrowableEthAmount, payable(address(this)));
 
         // deposit the borrowed ether again
         bool leverageSuccess = middle.depositEth{value: address(this).balance}(_cEtherAddress);

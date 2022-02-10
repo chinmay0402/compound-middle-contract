@@ -86,7 +86,7 @@ describe("Compound Middle Contract", function () {
         });
 
         it('Should fail when borrow is attempted without minting tokens', async () => {
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001'), true, zeroAddress))
+            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001')))
                 .to.be.revertedWith("DEPOSIT TOKENS FIRST");
         })
 
@@ -95,7 +95,7 @@ describe("Compound Middle Contract", function () {
                 .to.changeTokenBalance(Dai, cDai, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('1000'), true, zeroAddress))
+            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('1000')))
                 .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -105,7 +105,7 @@ describe("Compound Middle Contract", function () {
 
             // call borrow
             // Note: Getting COMPTROLLER_REJECTED error with BORROW FAILED on increasing borrow amount even though liquidity was enough (debug later)
-            await expect(await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001'), true, zeroAddress))
+            await expect(await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0000000001')))
                 .to.changeEtherBalances(
                     [owner], [parseEther('0.0000000001')]
                 ); //  the ether balance of the user should increase after borrowed amount get transferred
@@ -126,7 +126,7 @@ describe("Compound Middle Contract", function () {
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
-            await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0001'), true, zeroAddress );
+            await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cDaiAddress, parseEther('0.0001'));
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
         });
 
