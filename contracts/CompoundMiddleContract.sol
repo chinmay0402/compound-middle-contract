@@ -131,7 +131,6 @@ contract CompoundMiddleContract {
 
         // scale liquidity up to maintain precision
         uint256 scaledLiquidity = getAccountLiquidityResponse.liquidity * (10**18);
-
         // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
         require(_amountToBorrowInWei * uniView.price("ETH") <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
 
@@ -453,7 +452,7 @@ contract CompoundMiddleContract {
             uint256 amountOfTokenDepositsInUsd = priceFeed.getUnderlyingPrice(markets[i])*cToken.balanceOfUnderlying(address(this)); 
             totalCollateral = totalCollateral + amountOfTokenDepositsInUsd; 
         }
-        console.log("Total Collateral in USD: ", totalCollateral);
+        console.log("Total Collateral in USD (scaled up by 10^36): ", totalCollateral);
         return totalCollateral; //  this value has actually been scaled by 1e36
     }
 
@@ -469,7 +468,7 @@ contract CompoundMiddleContract {
             uint256 amountBorrowedInUsd = priceFeed.getUnderlyingPrice(markets[i])*cToken.borrowBalanceCurrent(address(this)); 
             totalDebt = totalDebt + amountBorrowedInUsd; 
         }
-        console.log("Total Debt in USD: ", totalDebt);
+        console.log("Total Debt in USD (scaled up by 10^36): ", totalDebt);
         return totalDebt; //  this value has actually been scaled by 1e36
     }
 
