@@ -36,12 +36,7 @@ contract Leverage {
         uint256 borrowableEthAmount = (collateralFactorMantissa - (1*(10**17))) * supplyEth / 10**18;
         console.log("collateralFactorMantissa: ", (collateralFactorMantissa - (1*(10**17))));
         // borrow the amount
-        middle._leverageEth(_cEtherAddress, _comptrollerAddress, borrowableEthAmount, payable(address(this)));
-
-        // deposit the borrowed ether again
-        bool leverageSuccess = middle.depositEth{value: address(this).balance}(_cEtherAddress);
-
-        require(leverageSuccess == true, "LEVERAGE: LEVERAGE SUPPLY FAILED");
+        middle._leverageEth(_cEtherAddress, _comptrollerAddress, borrowableEthAmount);
 
         totalCollateral = middle.getTotalCollateralInUsd(_comptrollerAddress);
         totalDebt = middle.getTotalDebtInUsd(_comptrollerAddress);
@@ -78,11 +73,6 @@ contract Leverage {
         
         // borrow the amount
         middle._leverageErc20(_cTokenAddress, _erc20Address, _comptrollerAddress, erc20BorrowAmount);
-
-        // deposit the borrowed tokens again
-        bool leverageSuccess = middle.depositErc20(_erc20Address, _cTokenAddress, erc20BorrowAmount);
-
-        require(leverageSuccess == true, "LEVERAGE: LEVERAGE SUPPLY FAILED");
 
         totalCollateral = middle.getTotalCollateralInUsd(_comptrollerAddress);
         totalDebt = middle.getTotalDebtInUsd(_comptrollerAddress);

@@ -6,7 +6,6 @@ import "hardhat/console.sol";
 import "./interfaces/Compound.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./Leverage.sol";
 
 contract CompoundMiddleContract {
     using SafeERC20 for IERC20;
@@ -43,7 +42,7 @@ contract CompoundMiddleContract {
         // create reference to cEther contract in Compound
         CEth cEth = CEth(_cEtherAddress);
         // msg.value is the amount of ether send to the contract from the wallet when this function was called
-        cEth.mint{value: msg.value, gas: 250000}(); // no return, will revert on error
+        cEth.mint{value: address(this).balance, gas: 250000}(); // no return, will revert on error
 
         console.log("Supplied %s wei to Compound via smart contract", msg.value);
         console.log("Total ether deposits: ", cEth.balanceOfUnderlying(address(this)));
@@ -173,14 +172,12 @@ contract CompoundMiddleContract {
      * @param _cEtherAddress address of the cEther contract in Compound
      * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
-     * @param _leverageContractAddress address of the Leverage contract (can be address(0) when _borrowType is false)
      * @return uint256 the current borrow balance of the user
      */
     function _leverageEth(
         address payable _cEtherAddress,
         address _comptrollerAddress,
-        uint256 _amountToBorrowInWei,
-        address payable _leverageContractAddress
+        uint256 _amountToBorrowInWei
     ) external returns (uint256) {
         // declare references to external contracts
         CEth cEth = CEth(_cEtherAddress);
@@ -231,8 +228,9 @@ contract CompoundMiddleContract {
         uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
 
         // send ether to Leverage contract
-        (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
-        require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
+        // (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
+        // require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
+        require(this.depositEth(_cEtherAddress) == true, "LEVERAGE: LEVERAGE DEPOSIT FAILED");
 
         return borrowBalance;
     }
@@ -368,7 +366,6 @@ contract CompoundMiddleContract {
         // Create references to Compound and Token contracts
         CErc20 cTokenDep = CErc20(_cTokenLeverageAddress);
         CErc20 cToken = CErc20(_cTokenLeverageAddress);
-        IERC20 token = IERC20(_erc20Address);
         Comptroller comptroller = Comptroller(_comptrollerAddress);
         ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
@@ -400,7 +397,7 @@ contract CompoundMiddleContract {
         require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
 
         // transfer borrowed erc20 to user
-        token.safeTransfer(owner, _amountToBorrow);
+        require(this.depositErc20(_erc20Address, _cTokenLeverageAddress, _amountToBorrow) == true, "LEVERAGE: LEVERAGE DEPOSIT ERC20 FAILED");
         
         return cToken.borrowBalanceCurrent(address(this));
     }
