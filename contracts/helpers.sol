@@ -12,9 +12,11 @@ contract Helpers {
     address constant internal comptrollerAddress = 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B;
     address constant internal cEtherAddress = 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
     address constant internal ethAddr = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address constant internal uniswapAnchorViewAddress = 0x046728da7cb8272284238bD3e47909823d63A58D;
 
     Comptroller internal comptroller = Comptroller(comptrollerAddress);
-    CEth cEth = CEth(cEtherAddress);
+    UniswapAnchoredView internal priceFeed = UniswapAnchoredView(uniswapAnchorViewAddress);
+    CEth internal cEth = CEth(cEtherAddress);
 
     function enterMarket(address _cTokenAddress) internal {
         address[] memory cTokens = new address[](1); // 1 is the array length
@@ -31,12 +33,46 @@ contract Helpers {
         require(shortfall == 0, "account underwater");
         require(liquidity > 0, "account has excess collateral");
 
-        // liquidity is the USD value borrowable by the user, before it reaches liquidation
+        // liquidity is the USD value borrowable by the user, before it reaches liquidation (scaled up by 10**18)
         console.log("Liquidity available: ", liquidity);        
 
         // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
-        require(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D)
-                .getUnderlyingPrice(_cTokenAddress) * _amountToBorrow <= liquidity * (10**18),
+        require(priceFeed.getUnderlyingPrice(_cTokenAddress) * _amountToBorrow <= liquidity * (10**18),
              "BORROW FAILED: NOT ENOUGH COLLATERAL");
+    }
+
+    /**
+     *@dev returns the total value of all deposited collateral in USD (scaled up by 10**36)
+    */
+    function getTotalCollateralInUsd()
+        external
+        returns (uint256) {
+        address[] memory markets = comptroller.getAssetsIn(address(this));
+        uint256 totalCollateral = 0;
+        for (uint256 i = 0; i < markets.length; i++) {
+            CErc20 cToken = CErc20(markets[i]);
+            uint256 amountOfTokenDepositsInUsd = priceFeed.getUnderlyingPrice(markets[i]) * cToken.balanceOfUnderlying(address(this));
+            totalCollateral = totalCollateral + amountOfTokenDepositsInUsd;
+        }
+        console.log(
+            "Total Collateral in USD (scaled up by 10^36): ",
+            totalCollateral
+        );
+        return totalCollateral; //  this value has actually been scaled by 1e36
+    }
+
+    /**
+     *@dev returns the total value of all taken debt in USD (scaled up by 10**36)
+    */
+    function getTotalDebtInUsd() external returns (uint256) {
+        address[] memory markets = comptroller.getAssetsIn(address(this));
+        uint256 totalDebt = 0;
+        for (uint256 i = 0; i < markets.length; i++) {
+            CErc20 cToken = CErc20(markets[i]);
+            uint256 amountBorrowedInUsd = priceFeed.getUnderlyingPrice(markets[i]) * cToken.borrowBalanceCurrent(address(this));
+            totalDebt = totalDebt + amountBorrowedInUsd;
+        }
+        console.log("Total Debt in USD (scaled up by 10^36): ", totalDebt);
+        return totalDebt; //  this value has actually been scaled by 1e36
     }
 }

@@ -132,13 +132,13 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should fail on attempting to repay more than borrowed', async () => {
-            await expect(middleContract.paybackEth(cEtherAddress, 250000, {
+            await expect(middleContract.repay(cEtherAddress, ethAddr, parseEther('1000'), {
                 value: parseEther('1000')
             })).to.be.revertedWith("REPAY AMOUNT MORE THAN BORROWED AMOUNT");
         })
 
         it('Should repay amount and update borrowBalanceCurrent', async () => {
-            await middleContract.paybackEth(cEtherAddress, 250000, {
+            await middleContract.repay(cEtherAddress, ethAddr, parseEther('0.000001000000011800'), {
                 value: parseEther('0.000001000000011800')
             });
 
@@ -236,12 +236,12 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should fail on trying to repay more than borrowed', async () => {
-            await expect(middleContract.paybackErc20(cBATAddress, BATAddress, parseUnits('110', 0)))
+            await expect(middleContract.repay(cBATAddress, BATAddress, parseUnits('110', 0)))
                     .to.be.revertedWith("REPAY AMOUNT MORE THAN BORROWED AMOUNT");
         });
 
-        it('Should repay tokens and update borrowBalance', async () => {
-            await expect(() => middleContract.paybackErc20(cBATAddress, BATAddress, parseUnits('100', 0)))
+        it('Should repay tokens and update balances', async () => {
+            await expect(() => middleContract.repay(cBATAddress, BATAddress, parseUnits('100', 0)))
             .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 0), parseUnits('100', 0)]);
         });
     });

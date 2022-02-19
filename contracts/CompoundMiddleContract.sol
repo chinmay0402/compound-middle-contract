@@ -22,6 +22,10 @@ contract CompoundMiddleContract is Helpers {
         return owner;
     }
 
+    function getEthBorrowBalance() external view returns (uint256) {
+        return ethBorrowBalance;
+    }
+
     /**
      * @dev deposits tokens/ETH to Compound protocol
      * @param _tokenAddress address of the token which is to be deposited (ethAddr for ETH deposits)
@@ -69,7 +73,7 @@ contract CompoundMiddleContract is Helpers {
         uint256 _redeemAmount, 
         address _cTokenAddress, 
         address _tokenAddress
-    )external {
+    ) external {
         if(_tokenAddress == ethAddr) {
             require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
@@ -109,7 +113,6 @@ contract CompoundMiddleContract is Helpers {
         address _cTokenAddress,
         uint256 _amountToBorrow
     ) external {
-
         checkCollateral(_cTokenAddress, _amountToBorrow);
 
         if(_tokenAddress == ethAddr) {
@@ -120,6 +123,7 @@ contract CompoundMiddleContract is Helpers {
 
             (bool success, ) = owner.call{value: _amountToBorrow}("");
             require(success, "FAILURE IN SENDING ETHER TO USER");
+            ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
         }
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
@@ -135,27 +139,43 @@ contract CompoundMiddleContract is Helpers {
 
     /**
      * @dev repays borrowed eth
-     * @param _cEtherAddress address of the cEth contract in Compound
-     * @return uint256 updated borrow balance of the user
+     * @param _cTokenAddress address of the cToken contract in Compound
+     * @param _tokenAddress address of token contract (ethAddr for ETH)
+     * @param _repayAmount amount of token to be repayed
     */
-    function paybackEth(address _cEtherAddress, uint256 gas)
-        external
-        payable
-        returns (uint256)
-    {
-        CEth cEth = CEth(_cEtherAddress);
-        // CHECK: IF msg.value ETH WAS EVEN BORROWED
-        require(
-            msg.value <= cEth.borrowBalanceCurrent(address(this)),
-            "REPAY AMOUNT MORE THAN BORROWED AMOUNT"
-        );
+    function repay(
+        address _cTokenAddress, 
+        address _tokenAddress,
+        uint256 _repayAmount
+    ) external payable {
+        if(_tokenAddress == ethAddr) {
+            require(_repayAmount == msg.value, "INCORRECT AMOUNT OF ETHER SENT");
+            // CHECK: IF msg.value ETH WAS EVEN BORROWED 
+            ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
+            require(_repayAmount <= ethBorrowBalance,"REPAY AMOUNT MORE THAN BORROWED AMOUNT");
+            
+            cEth.repayBorrow{value: msg.value, gas: 250000}();
+            console.log("Repayed %s wei", msg.value);
+            ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
+        }
+        else{
+            CErc20 cToken = CErc20(_cTokenAddress);
+            IERC20 token = IERC20(_tokenAddress);
 
-        cEth.repayBorrow{value: msg.value, gas: gas}();
+            // transfer user's tokens to contract
+            token.safeTransferFrom(msg.sender, address(this), _repayAmount);
 
-        console.log("Repayed %s ether", msg.value);
-        ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
-        return ethBorrowBalance;
+            // approve Compound to spend erc20 tokens
+            token.safeApprove(_cTokenAddress, _repayAmount);
+
+            // CHECK: IF USER HAS A BORROWBALANCE OF MORE THAN _repayAmount ON THIS TOKEN
+            require(_repayAmount <= cToken.borrowBalanceCurrent(address(this)), "REPAY AMOUNT MORE THAN BORROWED AMOUNT");
+
+            // repay borrow
+            require(cToken.repayBorrow(_repayAmount) == 0, "REPAY FAILED");
+        }
     }
+
 
     /**
      * @dev borrows Eth from Compound keeping another eth as collateral, used by Leverage contract
@@ -183,10 +203,6 @@ contract CompoundMiddleContract is Helpers {
         return borrowBalance;
     }
 
-    function getEthBorrowBalance() external view returns (uint256) {
-        return ethBorrowBalance;
-    }
-
     /**
      * @dev borrows erc20 token with the same token as collateral (used for leveraging)
      * @param _cTokenAddress address of cToken contract in Compound (which is to be lleveraged)
@@ -211,75 +227,6 @@ contract CompoundMiddleContract is Helpers {
         deposit(_erc20ToLeverageAddress, payable(_cTokenAddress), _amountToBorrow);
 
         return cToken.borrowBalanceCurrent(address(this));
-    }
-
-    /**
-     * @dev repays erc20 tokens to Compound
-     * @param _cErc20Address address of cErc20 contract in Compound
-     * @param _erc20Address address of the erc20 token contract
-     * @param _repayAmount number of erc20 tokens to be repayed
-     * @return uint256 updated borrowBalance for the erc20 token
-     */
-    function paybackErc20(
-        address _cErc20Address,
-        address _erc20Address,
-        uint256 _repayAmount
-    ) external returns (uint256) {
-        // create references to contracts
-        CErc20 cToken = CErc20(_cErc20Address);
-        IERC20 token = IERC20(_erc20Address);
-
-        // transfer user's tokens to contract
-        token.safeTransferFrom(msg.sender, address(this), _repayAmount);
-
-        // approve Compound to spend erc20 tokens
-        token.safeIncreaseAllowance(_cErc20Address, _repayAmount);
-
-        // CHECK: IF USER HAS A BORROWBALANCE OF MORE THAN _repayAmount ON THIS TOKEN
-        require(
-            cToken.borrowBalanceCurrent(address(this)) >= _repayAmount,
-            "REPAY AMOUNT MORE THAN BORROWED AMOUNT"
-        );
-
-        // repay borrow
-        require(cToken.repayBorrow(_repayAmount) == 0, "REPAY FAILED");
-
-        // return updated borrowBalance
-        return cToken.borrowBalanceCurrent(address(this));
-    }
-
-    /**
-     *@dev returns the total value of all deposited collateral in USD (scaled up by 10**36)
-     */
-    function getTotalCollateralInUsd()
-        external
-        returns (uint256) {
-        address[] memory markets = comptroller.getAssetsIn(address(this));
-        uint256 totalCollateral = 0;
-        for (uint256 i = 0; i < markets.length; i++) {
-            CErc20 cToken = CErc20(markets[i]);
-            UniswapAnchoredView priceFeed = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-            uint256 amountOfTokenDepositsInUsd = priceFeed.getUnderlyingPrice(markets[i]) * cToken.balanceOfUnderlying(address(this));
-            totalCollateral = totalCollateral + amountOfTokenDepositsInUsd;
-        }
-        console.log(
-            "Total Collateral in USD (scaled up by 10^36): ",
-            totalCollateral
-        );
-        return totalCollateral; //  this value has actually been scaled by 1e36
-    }
-
-    function getTotalDebtInUsd() external returns (uint256) {
-        address[] memory markets = comptroller.getAssetsIn(address(this));
-        uint256 totalDebt = 0;
-        for (uint256 i = 0; i < markets.length; i++) {
-            CErc20 cToken = CErc20(markets[i]);
-            UniswapAnchoredView priceFeed = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-            uint256 amountBorrowedInUsd = priceFeed.getUnderlyingPrice(markets[i]) * cToken.borrowBalanceCurrent(address(this));
-            totalDebt = totalDebt + amountBorrowedInUsd;
-        }
-        console.log("Total Debt in USD (scaled up by 10^36): ", totalDebt);
-        return totalDebt; //  this value has actually been scaled by 1e36
     }
 
     /**
