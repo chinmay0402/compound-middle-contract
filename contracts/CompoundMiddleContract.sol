@@ -3,7 +3,7 @@
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
-import "./interfaces/Compound.sol";
+import "./interface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Helpers } from "./helpers.sol";
@@ -100,29 +100,44 @@ contract CompoundMiddleContract is Helpers {
 
     /**
      * @dev borrows Eth from Compound keeping another token as collateral
-     * @param _amountToBorrowInWei amount of ether to be borrowed in wei
-     * @return uint256 the current borrow balance of the user
-     */
-    function borrowEth(uint256 _amountToBorrowInWei) external returns (uint256) {
+     * @param _tokenAddress address of token to borrow (ethAddr for ETH borrows)
+     * @param _cTokenAddress address of cToken contract for the token being borrowed
+     * @param _amountToBorrow amount of ether to be borrowed in wei
+    */
+    function borrow(
+        address _tokenAddress,
+        address _cTokenAddress,
+        uint256 _amountToBorrow
+    ) external {
 
-        checkCollateral(cEtherAddress, _amountToBorrowInWei);
+        checkCollateral(_cTokenAddress, _amountToBorrow);
 
-        require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
+        if(_tokenAddress == ethAddr) {
 
-        console.log("Borrowed %s wei", _amountToBorrowInWei);
+            require(cEth.borrow(_amountToBorrow) == 0, "BORROW FAILED");
 
-        uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
+            console.log("Borrowed %s wei", _amountToBorrow);
 
-        (bool success, ) = owner.call{value: address(this).balance}("");
-        require(success, "FAILURE IN SENDING ETHER TO USER");
-        return borrowBalance;
+            (bool success, ) = owner.call{value: _amountToBorrow}("");
+            require(success, "FAILURE IN SENDING ETHER TO USER");
+        }
+        else{
+            CErc20 cToken = CErc20(_cTokenAddress);
+            IERC20 token = IERC20(_tokenAddress);
+            
+            // borrow
+            require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
+
+            // transfer borrowed erc20 to user
+            token.safeTransfer(owner, _amountToBorrow);
+        }
     }
 
     /**
      * @dev repays borrowed eth
      * @param _cEtherAddress address of the cEth contract in Compound
      * @return uint256 updated borrow balance of the user
-     */
+    */
     function paybackEth(address _cEtherAddress, uint256 gas)
         external
         payable
@@ -170,33 +185,6 @@ contract CompoundMiddleContract is Helpers {
 
     function getEthBorrowBalance() external view returns (uint256) {
         return ethBorrowBalance;
-    }
-
-    /**
-     * @dev borrows erc20 token with ether as collateral
-     * @param _erc20Address address of erc20 token contract
-     * @param _cTokenAddress address of cToken to borrow
-     * @param _amountToBorrow amount of erc20 tokens to borrow
-     * @return uint256 borrowBalance of the user
-     */
-    function borrowErc20(
-        address _erc20Address,
-        address _cTokenAddress,
-        uint256 _amountToBorrow
-    ) external returns (uint256) {
-        // Create references to Compound and Token contracts
-        CErc20 cToken = CErc20(_cTokenAddress);
-        IERC20 token = IERC20(_erc20Address);
-        
-        checkCollateral(_cTokenAddress, _amountToBorrow);
-
-        // borrow
-        require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
-
-        // transfer borrowed erc20 to user
-        token.safeTransfer(owner, _amountToBorrow);
-
-        return cToken.borrowBalanceCurrent(address(this));
     }
 
     /**
