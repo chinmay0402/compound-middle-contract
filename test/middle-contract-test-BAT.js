@@ -89,17 +89,12 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
         });
 
-        it('Should fail when borrow is attempted without minting tokens', async () => {
-            await expect(middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.0000000001')))
-                .to.be.revertedWith("DEPOSIT TOKENS FIRST");
-        })
-
         it('Should fail on attempting to borrow more than liquidity', async () => {
             await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
-            await expect(middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('1000')))
+            await expect(middleContract.borrowEth(parseEther('1000')))
                 .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -109,7 +104,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
             // call borrow
             // Note: Getting COMPTROLLER_REJECTED error with BORROW FAILED on increasing borrow amount even though liquidity was enough (debug later)
-            await expect(await middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.0000000001')))
+            await expect(await middleContract.borrowEth(parseEther('0.0000000001')))
                 .to.changeEtherBalances(
                     [owner], [parseEther('0.0000000001')]
                 ); //  the ether balance of the user should increase after borrowed amount get transferred
@@ -130,7 +125,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
-            await middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.000001'));
+            await middleContract.borrowEth(parseEther('0.000001'));
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
         });
 
@@ -155,14 +150,14 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             // seed the user's address with some BAT
             const tokenArtifact = await artifacts.readArtifact("IERC20");
             BAT = new ethers.Contract(BATAddress, tokenArtifact.abi, ethers.provider);
-            await BAT.connect(owner).approve(middleContract.address, parseUnits("0.000001", 18));
+            await BAT.connect(owner).approve(middleContract.address, parseUnits("100", 18));
 
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
         });
 
-        it('Should deposit ERC20 tokens to Compoud', async () => {
-            await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits('100', 0)))
-                    .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 0), parseUnits('100', 0)]);
+        it('Should deposit ERC20 tokens to Compound', async () => {
+            await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits('100', 18)))
+                    .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 18), parseUnits('100', 18)]);
         })
     });
 
@@ -186,7 +181,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
         it('Should update token balances on withdraw', async () => {
             await expect(() => middleContract.withdrawErc20(cBATAddress, BATAddress, 1000))
-                    .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits("206623687551", 0), parseUnits("-206623687551", 0)]); // increased amount to account for interest
+                    .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits("206623687121", 0), parseUnits("-206623687121", 0)]); // increased amount to account for interest
         });
     });
 
@@ -200,17 +195,12 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
         });
 
-        it('Should fail if borrow is attempted without depositing ETH', async () => {
-            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0)))
-                    .to.be.revertedWith("DEPOSIT SAID TOKEN FIRST");
-        });
-
         it('Should fail on trying to borrow more amount in tokens than liquidity', async () => {
             await middleContract.deposit(ethAddr, cEtherAddress, parseEther('0.01'), {
                 value: parseEther('0.01')
             })
 
-            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('1', 20)))
+            await expect(middleContract.borrowErc20(BATAddress, cBATAddress, parseUnits('1', 20)))
                     .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -221,7 +211,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
                     [owner], [parseEther("-1")]
                 )
 
-            await expect(() => middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0)))
+            await expect(() => middleContract.borrowErc20(BATAddress, cBATAddress, parseUnits('100', 0)))
                 .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('100', 0), parseUnits('-100', 0)]);
         });
     });
@@ -240,7 +230,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             });
 
             // borrow BAT
-            await middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0));
+            await middleContract.borrowErc20(BATAddress, cBATAddress, parseUnits('100', 0));
         });
 
         it('Should fail on trying to repay more than borrowed', async () => {
