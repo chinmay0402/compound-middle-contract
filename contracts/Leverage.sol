@@ -25,9 +25,7 @@ contract Leverage is Helpers {
         uint256 supplyEth = msg.value;
         console.log(supplyEth);
         // supply ether
-        bool depositSuccess = middle.deposit{value: msg.value}(ethAddr, _cEtherAddress, msg.value);
-
-        require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
+        middle.deposit{value: msg.value}(ethAddr, _cEtherAddress, msg.value);
         
         // calculate maximum borrowable amount for the supplied ether
         (, uint collateralFactorMantissa, ) = comptroller.markets(_cEtherAddress);
@@ -57,9 +55,7 @@ contract Leverage is Helpers {
         CompoundMiddleContract middle = CompoundMiddleContract(_middleContractAddress);
 
         // supply token
-        bool depositSuccess = middle.deposit(_erc20Address, payable(_cTokenAddress), _depositAmount);
-
-        require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
+        middle.deposit(_erc20Address, payable(_cTokenAddress), _depositAmount);
         
         // calculate maximum borrowable amount for the supplied tokens
         (, uint collateralFactorMantissa, ) = comptroller.markets(_cTokenAddress);

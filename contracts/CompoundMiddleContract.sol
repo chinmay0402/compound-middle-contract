@@ -14,12 +14,6 @@ contract CompoundMiddleContract is Helpers {
     address private owner; // required to send the received eth back to the user
     uint256 private ethBorrowBalance;
 
-    struct ComptrollerStatus {
-        uint256 liquidity;
-        uint256 error2;
-        uint256 shortfall;
-    }
-
     constructor() {
         owner = msg.sender; // sets contract owner
     }
@@ -29,13 +23,16 @@ contract CompoundMiddleContract is Helpers {
     }
 
     /**
-     * @dev deposits Ether to Compound protocol
-            uses the mint() method in CEth contract
-     * @param _cTokenAddress address of the cEth contract of Compound
-     * @return bool denoting status of transaction (success/failure)
+     * @dev deposits tokens/ETH to Compound protocol
+     * @param _tokenAddress address of the token which is to be deposited (ethAddr for ETH deposits)
+     * @param _cTokenAddress address of the cToken contract of the token Compound
+     * @param _amount number of tokens/ETH (in Wei) to deposit
      */
-    function deposit(address _tokenAddress, address payable _cTokenAddress, uint256 _amount)
-        public payable returns (bool) {
+    function deposit(
+        address _tokenAddress, 
+        address payable _cTokenAddress, 
+        uint256 _amount
+    ) public payable {
         // create reference to cEther contract in Compound
         // msg.value is the amount of ether send to the contract from the wallet when this function was called
         if(_tokenAddress == ethAddr){
@@ -59,18 +56,20 @@ contract CompoundMiddleContract is Helpers {
         }
 
         enterMarket(_cTokenAddress);
-
-        return true;
     }
 
     /**
      * @dev withdraws ether deposited to compound
             uses redeem() and redeemUnderlying() methods in CEth contract
      * @param _redeemAmount the number of cTokens to be redeemed
-     * @param _cTokenAddress address of cEth contract on Compound
+     * @param _cTokenAddress address of cToken contract on Compound
      * @param _tokenAddress address of ERC20 token to be withdrawn (ethAddr for ETH withdrawals)
      */
-    function withdraw(uint256 _redeemAmount, address _cTokenAddress, address _tokenAddress) external {
+    function withdraw(
+        uint256 _redeemAmount, 
+        address _cTokenAddress, 
+        address _tokenAddress
+    )external {
         if(_tokenAddress == ethAddr) {
             require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
@@ -104,28 +103,9 @@ contract CompoundMiddleContract is Helpers {
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
      * @return uint256 the current borrow balance of the user
      */
-    function borrowEth(
-        uint256 _amountToBorrowInWei
-    ) external returns (uint256) {
-        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+    function borrowEth(uint256 _amountToBorrowInWei) external returns (uint256) {
 
-
-        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
-        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
-        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
-        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
-
-        // liquidity is the USD value borrowable by the user, before it reaches liquidation
-        console.log("Liquidity available: ", getAccountLiquidityResponse.liquidity);
-
-        // get current price of ETH from price feed
-        UniswapAnchoredView uniView = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-
-        // scale liquidity up to maintain precision
-        uint256 scaledLiquidity = getAccountLiquidityResponse.liquidity *(10**18);
-
-        // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
-        require(_amountToBorrowInWei * uniView.price("ETH") <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
+        checkCollateral(cEtherAddress, _amountToBorrowInWei);
 
         require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
 
@@ -172,30 +152,8 @@ contract CompoundMiddleContract is Helpers {
         address payable _cEtherAddress,
         uint256 _amountToBorrowInWei
     ) external returns (uint256) {
+        checkCollateral(cEtherAddress, _amountToBorrowInWei);
 
-        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
-
-        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
-        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
-        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
-        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
-
-        // liquidity is the USD value borrowable by the user, before it reaches liquidation
-        console.log(
-            "Liquidity available: ",
-            getAccountLiquidityResponse.liquidity
-        );
-
-        // get current price of ETH from price feed
-        UniswapAnchoredView uniView = UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D);
-
-        // scale liquidity up to maintain precision
-        uint256 scaledLiquidity = getAccountLiquidityResponse.liquidity*(10**18);
-
-        // CHECK: IF USER IS ALLOWED TO BORROW THE AMOUNT ENTERED
-        require(_amountToBorrowInWei * uniView.price("ETH") <= scaledLiquidity, "BORROW FAILED: NOT ENOUGH COLLATERAL");
-
-        // borrow
         require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
 
         console.log("Borrowed %s wei", _amountToBorrowInWei);
@@ -205,7 +163,7 @@ contract CompoundMiddleContract is Helpers {
         // send ether to Leverage contract
         // (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
         // require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
-        require(deposit(ethAddr, _cEtherAddress, address(this).balance) == true,"LEVERAGE: LEVERAGE DEPOSIT FAILED");
+        deposit(ethAddr, _cEtherAddress, address(this).balance);
 
         return borrowBalance;
     }
@@ -229,24 +187,8 @@ contract CompoundMiddleContract is Helpers {
         // Create references to Compound and Token contracts
         CErc20 cToken = CErc20(_cTokenAddress);
         IERC20 token = IERC20(_erc20Address);
-        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
-
-        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
-        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
-        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
-        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
-
-        getAccountLiquidityResponse.liquidity = getAccountLiquidityResponse.liquidity * (10**18);
-
-        // CHECK: IF USER CAN BORROW _amountToBorrow AMOUNT WITH THE CURRENT DEPOSITS
-        // console.log(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D).getUnderlyingPrice(_cTokenAddress) * _amountToBorrow);
-        require(
-            UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D)
-                .getUnderlyingPrice(_cTokenAddress) *
-                _amountToBorrow <=
-                getAccountLiquidityResponse.liquidity,
-            "BORROW FAILED: NOT ENOUGH COLLATERAL"
-        );
+        
+        checkCollateral(_cTokenAddress, _amountToBorrow);
 
         // borrow
         require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
@@ -259,45 +201,26 @@ contract CompoundMiddleContract is Helpers {
 
     /**
      * @dev borrows erc20 token with the same token as collateral (used for leveraging)
-     * @param _cTokenLeverageAddress address of cToken contract in Compound (which is to be lleveraged)
-     * @param _erc20Address address of erc20 token contract
+     * @param _cTokenAddress address of cToken contract in Compound (which is to be lleveraged)
+     * @param _erc20ToLeverageAddress address of erc20 token contract
      * @param _amountToBorrow amount of erc20 tokens to borrow
      * @return uint256 borrowBalance of the user
      */
     function _leverageErc20(
-        address _cTokenLeverageAddress,
-        address _erc20Address,
+        address _cTokenAddress,
+        address _erc20ToLeverageAddress,
         uint256 _amountToBorrow
     ) external returns (uint256) {
         // Create references to Compound and Token contracts
-        CErc20 cToken = CErc20(_cTokenLeverageAddress);
-        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
-
-        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
-        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
-        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
-        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
-
-        getAccountLiquidityResponse.liquidity = getAccountLiquidityResponse.liquidity * (10**18);
-        // console.log(getAccountLiquidityResponse.liquidity);
-
-        // CHECK: IF USER CAN BORROW _amountToBorrow AMOUNT WITH THE CURRENT DEPOSITS
-        // console.log(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D).getUnderlyingPrice(_cTokenAddress) * _amountToBorrow);
-        require(
-            UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D)
-                .getUnderlyingPrice(_cTokenLeverageAddress) *
-                _amountToBorrow <=
-                getAccountLiquidityResponse.liquidity,
-            "BORROW FAILED: NOT ENOUGH COLLATERAL"
-        );
+        CErc20 cToken = CErc20(_cTokenAddress);
+        
+        checkCollateral(_cTokenAddress, _amountToBorrow);
 
         // borrow
         require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
 
         // transfer borrowed erc20 to user
-        require(deposit(_erc20Address, payable(_cTokenLeverageAddress), _amountToBorrow) == true,
-            "LEVERAGE: LEVERAGE DEPOSIT ERC20 FAILED"
-        );
+        deposit(_erc20ToLeverageAddress, payable(_cTokenAddress), _amountToBorrow);
 
         return cToken.borrowBalanceCurrent(address(this));
     }
@@ -373,6 +296,6 @@ contract CompoundMiddleContract is Helpers {
 
     /**
      *@dev fallback function to accept ether when borrowEth is called and send the eth back to owner
-     */
+    */
     receive() external payable {}
 }
