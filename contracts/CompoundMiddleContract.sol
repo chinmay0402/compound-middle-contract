@@ -34,7 +34,6 @@ contract CompoundMiddleContract is Helpers {
      * @param _cTokenAddress address of the cEth contract of Compound
      * @return bool denoting status of transaction (success/failure)
      */
-    // function receives ether from the wallet of the user, thus payable
     function deposit(address _tokenAddress, address payable _cTokenAddress, uint256 _amount)
         public payable returns (bool) {
         // create reference to cEther contract in Compound
@@ -68,40 +67,36 @@ contract CompoundMiddleContract is Helpers {
      * @dev withdraws ether deposited to compound
             uses redeem() and redeemUnderlying() methods in CEth contract
      * @param _redeemAmount the number of cTokens to be redeemed
-     * @param _cEtherAddress address of cEth contract on Compound
-     * @return bool status of transaction
+     * @param _cTokenAddress address of cEth contract on Compound
+     * @param _tokenAddress address of ERC20 token to be withdrawn (ethAddr for ETH withdrawals)
      */
-    function withdrawEth(uint256 _redeemAmount, address _cEtherAddress)
-        external
-        returns (bool)
-    {
-        CEth cEth = CEth(_cEtherAddress);
+    function withdraw(uint256 _redeemAmount, address _cTokenAddress, address _tokenAddress) external {
+        if(_tokenAddress == ethAddr) {
+            require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
-        require(
-            cEth.balanceOf(address(this)) >= _redeemAmount,
-            "NOT ENOUGH cTOKENS"
-        );
+            require(cEth.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING"); // redeem tokens
 
-        require(cEth.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING");
+            uint256 amountOfEthreceived = _redeemAmount * cEth.exchangeRateCurrent();
+            console.log("Redeemed %s cEth for %s wei", _redeemAmount, amountOfEthreceived);
 
-        uint256 amountOfEthreceived = _redeemAmount *
-            cEth.exchangeRateCurrent();
+            // send recieved eth back to user
+            (bool success, ) = owner.call{value: address(this).balance}(""); // prefer call() instead of transfer()
+            // transfer() and send() were the functions used earlier, but they forward fixed gas stipends (2300)
+            // there have been some breaking changes since then and assuming fixed gas costs is no longer feasible
+            // so, call() is the correct way to send funds these days
+            require(success, "FAILURE IN SENDING ETHER TO USER");
+        }
+        else{
+            CErc20 cToken = CErc20(_cTokenAddress);
+            IERC20 token = IERC20(_tokenAddress);
 
-        console.log(
-            "Redeemed %s cEth for %s wei",
-            _redeemAmount,
-            amountOfEthreceived
-        );
+            require(cToken.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
-        // send recieved eth back to user
-        (bool success, ) = owner.call{value: address(this).balance}(""); // prefer call() instead of transfer()
-        // transfer() and send() were the functions used earlier, but they forward fixed gas stipends (2300)
-        // there have been some breaking changes since then and assuming fixed gas costs is no longer feasible
-        // so, call() is the correct way to send funds these days
+            require(cToken.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING");
 
-        require(success, "FAILURE IN SENDING ETHER TO USER");
-
-        return true;
+            // transfer erc20 tokens back to user
+            token.safeTransfer(msg.sender, token.balanceOf(address(this)));
+        }
     }
 
     /**
@@ -217,35 +212,6 @@ contract CompoundMiddleContract is Helpers {
 
     function getEthBorrowBalance() external view returns (uint256) {
         return ethBorrowBalance;
-    }
-
-    /**
-     * @dev withdraws erc20 tokens from Compound
-     * @param _cErc20Contract address of the cErc20 contract on Compound
-     * @param _erc20Contract address of the erc20 token
-     * @param _amount the number of cTokens to be redeemed
-     * @return bool status of transaction
-     */
-    function withdrawErc20(
-        address _cErc20Contract,
-        address _erc20Contract,
-        uint256 _amount
-    ) external returns (bool) {
-        // Create a reference to the cToken contract
-        CErc20 cToken = CErc20(_cErc20Contract);
-        IERC20 token = IERC20(_erc20Contract);
-
-        // CHECK: IF USER HAS EVEN DEPOSITED _amount TO COMPOUND
-        require(
-            cToken.balanceOf(address(this)) >= _amount,
-            "INSUFFICIENT BALANCE"
-        );
-
-        require(cToken.redeem(_amount) == 0, "ERROR WHILE REDEEMING");
-
-        token.safeTransfer(msg.sender, token.balanceOf(address(this)));
-
-        return true;
     }
 
     /**

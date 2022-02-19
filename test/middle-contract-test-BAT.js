@@ -57,9 +57,10 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         })
         describe('Success', async () => {
             it('Should withdraw ether from Compound and send it to user', async () => {
-                await expect(await middleContract.withdrawEth(
+                await expect(await middleContract.withdraw(
                     4985102208,
-                    cEtherAddress
+                    cEtherAddress,
+                    ethAddr
                 )).to.changeEtherBalances(
                     // parseEther is >1 to take interest into account
                     [owner], [parseEther('1.000000001668029933')] // change to something better later
@@ -69,10 +70,11 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
         describe('Failure', async () => {
             it('Should reject withdraws greater than balance', async () => {
-                await expect(middleContract.withdrawEth(
+                await expect(middleContract.withdraw(
                     19940408832,
-                    cEtherAddress
-                )).to.be.revertedWith("NOT ENOUGH cTOKENS");
+                    cEtherAddress,
+                    ethAddr
+                )).to.be.revertedWith("INSUFFICIENT cTOKEN BALANCE");
             })
         });
 
@@ -175,12 +177,12 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         })
 
         it('Should fail on attempting to withdraw more than balance', async () => {
-            await expect(middleContract.withdrawErc20(cBATAddress, BATAddress, 2*4576928512))
-                    .to.be.revertedWith("INSUFFICIENT BALANCE");
+            await expect(middleContract.withdraw( 2*4576928512, cBATAddress, BATAddress))
+                    .to.be.revertedWith("INSUFFICIENT cTOKEN BALANCE");
         });
 
         it('Should update token balances on withdraw', async () => {
-            await expect(() => middleContract.withdrawErc20(cBATAddress, BATAddress, 1000))
+            await expect(() => middleContract.withdraw(1000, cBATAddress, BATAddress))
                     .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits("206623687121", 0), parseUnits("-206623687121", 0)]); // increased amount to account for interest
         });
     });
