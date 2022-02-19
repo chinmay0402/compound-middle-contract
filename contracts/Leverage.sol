@@ -7,8 +7,9 @@ import "./interfaces/Compound.sol";
 import "./CompoundMiddleContract.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Helpers } from "./helpers.sol";
 
-contract Leverage {
+contract Leverage is Helpers {
     using SafeERC20 for IERC20;
 
     /**
@@ -26,7 +27,7 @@ contract Leverage {
         uint256 supplyEth = msg.value;
         console.log(supplyEth);
         // supply ether
-        bool depositSuccess = middle.depositEth{value: msg.value}(_cEtherAddress);
+        bool depositSuccess = middle.deposit{value: msg.value}(ethAddr, _cEtherAddress, msg.value);
 
         require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
         
@@ -61,7 +62,7 @@ contract Leverage {
         CompoundMiddleContract middle = CompoundMiddleContract(_middleContractAddress);
 
         // supply token
-        bool depositSuccess = middle.depositErc20(_erc20Address, _cTokenAddress, _depositAmount);
+        bool depositSuccess = middle.deposit(_erc20Address, payable(_cTokenAddress), _depositAmount);
 
         require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
         

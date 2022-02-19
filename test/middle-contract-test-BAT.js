@@ -7,6 +7,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
     let middleContract, leverage;
     let owner;
 
+    const ethAddr = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
     const cEtherAddress = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
     const BATAddress = "0x0D8775F648430679A709E98d2b0Cb6250d2887EF";
     const cBATAddress = "0x6C8c6b02E7b2BE14d4fA6022Dfd6d75921D90E4E";
@@ -33,14 +34,14 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
     describe('Deposit Ether', async () => {
         it('Should deposit ether in Compound', async () => {
-            await expect(await middleContract.depositEth(cEtherAddress, {
+            await expect(await middleContract.deposit(ethAddr, cEtherAddress, parseEther('1'), {
                 value: parseEther("1")
             })
             ).to.changeEtherBalances(
                 [owner], [parseEther("-1")]
             )
 
-            await expect(await middleContract.depositEth(cEtherAddress, {
+            await expect(await middleContract.deposit(ethAddr, cEtherAddress, parseEther('2'), {
                 value: parseEther("2")
             })
             ).to.changeEtherBalances(
@@ -51,7 +52,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
     describe('Withdraw Ether', async () => {
         beforeEach(async () => {
-            await expect(await middleContract.depositEth(cEtherAddress, {
+            await expect(await middleContract.deposit(ethAddr, cEtherAddress, parseEther('3'), {
                 value: parseEther("3")
             }));
         })
@@ -95,7 +96,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         })
 
         it('Should fail on attempting to borrow more than liquidity', async () => {
-            await expect(() => middleContract.depositErc20(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
+            await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
@@ -104,7 +105,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should disburse loan amount', async () => {
-            await expect(() => middleContract.depositErc20(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
+            await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // call borrow
@@ -126,7 +127,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit collateral
-            await middleContract.depositErc20(BATAddress, cBATAddress, parseUnits("0.01", 18));
+            await middleContract.deposit(BATAddress, cBATAddress, parseUnits("0.01", 18));
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
@@ -161,7 +162,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should deposit ERC20 tokens to Compoud', async () => {
-            await expect(() => middleContract.depositErc20(BATAddress, cBATAddress, parseUnits('100', 0)))
+            await expect(() => middleContract.deposit(BATAddress, cBATAddress, parseUnits('100', 0)))
                     .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 0), parseUnits('100', 0)]);
         })
     });
@@ -176,7 +177,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit collateral
-            await middleContract.depositErc20(BATAddress, cBATAddress, parseUnits("1", 18));
+            await middleContract.deposit(BATAddress, cBATAddress, parseUnits("1", 18));
         })
 
         it('Should fail on attempting to withdraw more than balance', async () => {
@@ -206,7 +207,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should fail on trying to borrow more amount in tokens than liquidity', async () => {
-            await middleContract.depositEth(cEtherAddress, {
+            await middleContract.deposit(ethAddr, cEtherAddress, parseEther('0.01'), {
                 value: parseEther('0.01')
             })
 
@@ -215,7 +216,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should disburse loan tokens', async () => {
-            await expect(() => middleContract.depositEth(cEtherAddress, {
+            await expect(() => middleContract.deposit(ethAddr, cEtherAddress, parseEther('1'), {
                 value: parseEther('1')
             })).to.changeEtherBalances(
                     [owner], [parseEther("-1")]
@@ -235,7 +236,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit eth as collateral
-            await middleContract.depositEth(cEtherAddress, {
+            await middleContract.deposit(ethAddr, cEtherAddress, parseEther('1'), {
                 value: parseEther('1')
             });
 
