@@ -11,7 +11,6 @@ describe("Compound Middle Contract with ERC20 as DAI using ethers.getSigners()",
     const daiAddress = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
     const cDaiAddress = "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643";
     const comptrollerAddress = "0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B";
-    const zeroAddress = "0x0000000000000000000000000000000000000000";
 
     beforeEach(async () => {
         const middleContractFactory = await ethers.getContractFactory("CompoundMiddleContract");
