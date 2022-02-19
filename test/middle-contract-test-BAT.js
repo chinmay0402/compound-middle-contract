@@ -11,7 +11,6 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
     const cEtherAddress = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
     const BATAddress = "0x0D8775F648430679A709E98d2b0Cb6250d2887EF";
     const cBATAddress = "0x6C8c6b02E7b2BE14d4fA6022Dfd6d75921D90E4E";
-    const comptrollerAddress = "0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B";
 
     beforeEach(async () => {
         const middleContractFactory = await ethers.getContractFactory("CompoundMiddleContract");
@@ -91,7 +90,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should fail when borrow is attempted without minting tokens', async () => {
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cBATAddress, parseEther('0.0000000001')))
+            await expect(middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.0000000001')))
                 .to.be.revertedWith("DEPOSIT TOKENS FIRST");
         })
 
@@ -100,7 +99,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
-            await expect(middleContract.borrowEth(cEtherAddress, comptrollerAddress, cBATAddress, parseEther('1000')))
+            await expect(middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('1000')))
                 .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -110,7 +109,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
 
             // call borrow
             // Note: Getting COMPTROLLER_REJECTED error with BORROW FAILED on increasing borrow amount even though liquidity was enough (debug later)
-            await expect(await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cBATAddress, parseEther('0.0000000001')))
+            await expect(await middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.0000000001')))
                 .to.changeEtherBalances(
                     [owner], [parseEther('0.0000000001')]
                 ); //  the ether balance of the user should increase after borrowed amount get transferred
@@ -131,7 +130,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
-            await middleContract.borrowEth(cEtherAddress, comptrollerAddress, cBATAddress, parseEther('0.000001'));
+            await middleContract.borrowEth(cEtherAddress, cBATAddress, parseEther('0.000001'));
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
         });
 
@@ -202,7 +201,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
         });
 
         it('Should fail if borrow is attempted without depositing ETH', async () => {
-            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, comptrollerAddress, cBATAddress, parseUnits('100', 0)))
+            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0)))
                     .to.be.revertedWith("DEPOSIT SAID TOKEN FIRST");
         });
 
@@ -211,7 +210,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
                 value: parseEther('0.01')
             })
 
-            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, comptrollerAddress, cBATAddress, parseUnits('1', 20)))
+            await expect(middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('1', 20)))
                     .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
@@ -222,7 +221,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
                     [owner], [parseEther("-1")]
                 )
 
-            await expect(() => middleContract.borrowErc20(cEtherAddress, BATAddress, comptrollerAddress, cBATAddress, parseUnits('100', 0)))
+            await expect(() => middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0)))
                 .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('100', 0), parseUnits('-100', 0)]);
         });
     });
@@ -241,7 +240,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             });
 
             // borrow BAT
-            await middleContract.borrowErc20(cEtherAddress, BATAddress, comptrollerAddress, cBATAddress, parseUnits('100', 0));
+            await middleContract.borrowErc20(cEtherAddress, BATAddress, cBATAddress, parseUnits('100', 0));
         });
 
         it('Should fail on trying to repay more than borrowed', async () => {
@@ -261,7 +260,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             leverage = await leverageContractFactory.deploy();
         })
         it('Should create a leveraged ETH position', async () => {
-            await leverage.leverageEther(cEtherAddress, comptrollerAddress, middleContract.address, {
+            await leverage.leverageEther(cEtherAddress, middleContract.address, {
                 value: parseEther('1')
             });
         })
@@ -280,7 +279,7 @@ describe("Compound Middle Contract using impersonate_account with ERC20 token as
             leverage = await leverageContractFactory.deploy();
         });
         it('Should create a leveraged ERC20 position', async () => {
-            await leverage.leverageERC20(cBATAddress, comptrollerAddress, middleContract.address, BATAddress, parseUnits('1', 18));
+            await leverage.leverageERC20(cBATAddress, middleContract.address, BATAddress, parseUnits('1', 18));
         })
     });
 });

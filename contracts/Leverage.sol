@@ -15,12 +15,10 @@ contract Leverage is Helpers {
     /**
      * @dev leverages the supplied ether by supplying the amount, borrowing max. possible amount to the supply and supplying it again
      * @param _cEtherAddress address of cEther contract
-     * @param _comptrollerAddress address of Compound comptroller contract
      * @param _middleContractAddress address of middle contract (to be able to call borrow, deposit functions)
      */
     function leverageEther(
-        address payable _cEtherAddress, 
-        address _comptrollerAddress, 
+        address payable _cEtherAddress,
         address payable _middleContractAddress
     ) external payable returns (uint256 totalDebt, uint256 totalCollateral) {
         CompoundMiddleContract middle = CompoundMiddleContract(_middleContractAddress);
@@ -32,28 +30,25 @@ contract Leverage is Helpers {
         require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
         
         // calculate maximum borrowable amount for the supplied ether
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
         (, uint collateralFactorMantissa, ) = comptroller.markets(_cEtherAddress);
         uint256 borrowableEthAmount = (collateralFactorMantissa - (1*(10**17))) * supplyEth / 10**18;
         console.log("collateralFactorMantissa: ", (collateralFactorMantissa - (1*(10**17))));
         // borrow the amount
-        middle._leverageEth(_cEtherAddress, _comptrollerAddress, borrowableEthAmount);
+        middle._leverageEth(_cEtherAddress, borrowableEthAmount);
 
-        totalCollateral = middle.getTotalCollateralInUsd(_comptrollerAddress);
-        totalDebt = middle.getTotalDebtInUsd(_comptrollerAddress);
+        totalCollateral = middle.getTotalCollateralInUsd();
+        totalDebt = middle.getTotalDebtInUsd();
     }
 
     /**
      * @dev leverage ERC20 by supplying ERC20 tokens, borrowing the same tokens and depositing the borrowed amount again
      * @param _cTokenAddress address of cToken to leverage
-     * @param _comptrollerAddress address of Compound comptroller contract
      * @param _middleContractAddress address of middle contract
      * @param _erc20Address address of contract of token to be leveraged
      * @param _depositAmount number of tokens to supply initially
      */
     function leverageERC20(
-        address _cTokenAddress, 
-        address _comptrollerAddress, 
+        address _cTokenAddress,
         address payable _middleContractAddress,
         address _erc20Address,
         uint256 _depositAmount
@@ -67,16 +62,15 @@ contract Leverage is Helpers {
         require(depositSuccess == true, "LEVERAGE: DEPOSIT FAILED");
         
         // calculate maximum borrowable amount for the supplied tokens
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
         (, uint collateralFactorMantissa, ) = comptroller.markets(_cTokenAddress);
         uint256 erc20BorrowAmount = (collateralFactorMantissa - 1*(10**17)) * _depositAmount / 10**18; 
         // borrow amount has been kept a little less than max. allowed to prevent immediate liquidity
         
         // borrow the amount
-        middle._leverageErc20(_cTokenAddress, _erc20Address, _comptrollerAddress, erc20BorrowAmount);
+        middle._leverageErc20(_cTokenAddress, _erc20Address, erc20BorrowAmount);
 
-        totalCollateral = middle.getTotalCollateralInUsd(_comptrollerAddress);
-        totalDebt = middle.getTotalDebtInUsd(_comptrollerAddress);
+        totalCollateral = middle.getTotalCollateralInUsd();
+        totalDebt = middle.getTotalDebtInUsd();
     }
 
     /**

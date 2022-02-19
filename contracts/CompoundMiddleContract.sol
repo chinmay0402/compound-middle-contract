@@ -40,8 +40,8 @@ contract CompoundMiddleContract is Helpers {
         // create reference to cEther contract in Compound
         // msg.value is the amount of ether send to the contract from the wallet when this function was called
         if(_tokenAddress == ethAddr){
-            cEth.mint{value: address(this).balance, gas: 250000}(); // no return, will revert on error
-            console.log("Supplied %s wei to Compound via smart contract", msg.value);
+            cEth.mint{value: _amount, gas: 250000}(); // no return, will revert on error
+            console.log("Supplied %s wei to Compound via smart contract",_amount);
             console.log("Total ether deposits: ", cEth.balanceOfUnderlying(address(this)));
         }
         else{
@@ -56,10 +56,7 @@ contract CompoundMiddleContract is Helpers {
             // supply the tokens to Compound and mint cTokens
             require(cToken.mint(_amount) == 0, "TOKEN DEPOSIT FAILED");
 
-            console.log(
-                "Total token deposits: ",
-                cToken.balanceOfUnderlying(address(this))
-            );
+            console.log("Total token deposits: ", cToken.balanceOfUnderlying(address(this)));
         }
         return true;
     }
@@ -107,23 +104,19 @@ contract CompoundMiddleContract is Helpers {
     /**
      * @dev borrows Eth from Compound keeping another token as collateral
      * @param _cEtherAddress address of the cEther contract in Compound
-     * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
      * @return uint256 the current borrow balance of the user
      */
     function borrowEth(
         address _cEtherAddress,
-        address _comptrollerAddress,
         address _cTokenAddress,
         uint256 _amountToBorrowInWei
     ) external returns (uint256) {
         // declare references to external contracts
         CEth cEth = CEth(_cEtherAddress);
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
         CErc20 cToken = CErc20(_cTokenAddress);
-        ComptrollerStatus
-            memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
         require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
 
@@ -184,21 +177,16 @@ contract CompoundMiddleContract is Helpers {
     /**
      * @dev borrows Eth from Compound keeping another eth as collateral, used by Leverage contract
      * @param _cEtherAddress address of the cEther contract in Compound
-     * @param _comptrollerAddress address of the comptroller contract in Compound
      * @param _amountToBorrowInWei amount of ether to be borrowed in wei
      * @return uint256 the current borrow balance of the user
      */
     function _leverageEth(
         address payable _cEtherAddress,
-        address _comptrollerAddress,
         uint256 _amountToBorrowInWei
     ) external returns (uint256) {
         // declare references to external contracts
-        CEth cEth = CEth(_cEtherAddress);
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
         CErc20 cToken = CErc20(_cEtherAddress);
-        ComptrollerStatus
-            memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
         require(cToken.balanceOf(address(this)) > 0, "DEPOSIT TOKENS FIRST");
 
@@ -276,7 +264,6 @@ contract CompoundMiddleContract is Helpers {
      * @dev borrows erc20 token with ether as collateral
      * @param _cTokenDepAddress address of cToken (or cEther) contract in Compound (which is to be kept as collateral)
      * @param _erc20Address address of erc20 token contract
-     * @param _comptrollerAddress address of comptroller contract in Compound
      * @param _cTokenAddress address of cToken to borrow
      * @param _amountToBorrow amount of erc20 tokens to borrow
      * @return uint256 borrowBalance of the user
@@ -284,7 +271,6 @@ contract CompoundMiddleContract is Helpers {
     function borrowErc20(
         address _cTokenDepAddress,
         address _erc20Address,
-        address _comptrollerAddress,
         address _cTokenAddress,
         uint256 _amountToBorrow
     ) external returns (uint256) {
@@ -292,9 +278,7 @@ contract CompoundMiddleContract is Helpers {
         CErc20 cTokenDep = CErc20(_cTokenDepAddress);
         CErc20 cToken = CErc20(_cTokenAddress);
         IERC20 token = IERC20(_erc20Address);
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
-        ComptrollerStatus
-            memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
         // console.log("cToken contract balance: ", cToken.balanceOfUnderlying(address(this)));
 
@@ -306,28 +290,12 @@ contract CompoundMiddleContract is Helpers {
 
         enterMarket(_cTokenDepAddress);
 
-        (
-            getAccountLiquidityResponse.error2,
-            getAccountLiquidityResponse.liquidity,
-            getAccountLiquidityResponse.shortfall
-        ) = comptroller.getAccountLiquidity(address(this));
-        require(
-            getAccountLiquidityResponse.error2 == 0,
-            "comptroller.getAccountLiquidity FAILED"
-        );
-        require(
-            getAccountLiquidityResponse.shortfall == 0,
-            "account underwater"
-        );
-        require(
-            getAccountLiquidityResponse.liquidity > 0,
-            "account has excess collateral"
-        );
+        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
+        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
+        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
+        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
 
-        getAccountLiquidityResponse.liquidity =
-            getAccountLiquidityResponse.liquidity *
-            (10**18);
-        // console.log(getAccountLiquidityResponse.liquidity);
+        getAccountLiquidityResponse.liquidity = getAccountLiquidityResponse.liquidity * (10**18);
 
         // CHECK: IF USER CAN BORROW _amountToBorrow AMOUNT WITH THE CURRENT DEPOSITS
         // console.log(UniswapAnchoredView(0x046728da7cb8272284238bD3e47909823d63A58D).getUnderlyingPrice(_cTokenAddress) * _amountToBorrow);
@@ -352,54 +320,32 @@ contract CompoundMiddleContract is Helpers {
      * @dev borrows erc20 token with the same token as collateral (used for leveraging)
      * @param _cTokenLeverageAddress address of cToken contract in Compound (which is to be lleveraged)
      * @param _erc20Address address of erc20 token contract
-     * @param _comptrollerAddress address of comptroller contract in Compound
      * @param _amountToBorrow amount of erc20 tokens to borrow
      * @return uint256 borrowBalance of the user
      */
     function _leverageErc20(
         address _cTokenLeverageAddress,
         address _erc20Address,
-        address _comptrollerAddress,
         uint256 _amountToBorrow
     ) external returns (uint256) {
         // Create references to Compound and Token contracts
         CErc20 cTokenDep = CErc20(_cTokenLeverageAddress);
         CErc20 cToken = CErc20(_cTokenLeverageAddress);
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
-        ComptrollerStatus
-            memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
+        ComptrollerStatus memory getAccountLiquidityResponse = ComptrollerStatus(0, 0, 0);
 
         // console.log("cToken contract balance: ", cToken.balanceOfUnderlying(address(this)));
 
         // check if user has previous token/eth deposits
-        require(
-            cTokenDep.balanceOf(address(this)) > 0,
-            "DEPOSIT SAID TOKEN FIRST"
-        );
+        require(cTokenDep.balanceOf(address(this)) > 0, "DEPOSIT SAID TOKEN FIRST");
 
         enterMarket(_cTokenLeverageAddress);
 
-        (
-            getAccountLiquidityResponse.error2,
-            getAccountLiquidityResponse.liquidity,
-            getAccountLiquidityResponse.shortfall
-        ) = comptroller.getAccountLiquidity(address(this));
-        require(
-            getAccountLiquidityResponse.error2 == 0,
-            "comptroller.getAccountLiquidity FAILED"
-        );
-        require(
-            getAccountLiquidityResponse.shortfall == 0,
-            "account underwater"
-        );
-        require(
-            getAccountLiquidityResponse.liquidity > 0,
-            "account has excess collateral"
-        );
+        (getAccountLiquidityResponse.error2, getAccountLiquidityResponse.liquidity, getAccountLiquidityResponse.shortfall) = comptroller.getAccountLiquidity(address(this));
+        require(getAccountLiquidityResponse.error2 == 0, "comptroller.getAccountLiquidity FAILED");
+        require(getAccountLiquidityResponse.shortfall == 0, "account underwater");
+        require(getAccountLiquidityResponse.liquidity > 0, "account has excess collateral");
 
-        getAccountLiquidityResponse.liquidity =
-            getAccountLiquidityResponse.liquidity *
-            (10**18);
+        getAccountLiquidityResponse.liquidity = getAccountLiquidityResponse.liquidity * (10**18);
         // console.log(getAccountLiquidityResponse.liquidity);
 
         // CHECK: IF USER CAN BORROW _amountToBorrow AMOUNT WITH THE CURRENT DEPOSITS
@@ -461,11 +407,9 @@ contract CompoundMiddleContract is Helpers {
     /**
      *@dev returns the total value of all deposited collateral in USD (scaled up by 10**36)
      */
-    function getTotalCollateralInUsd(address _comptrollerAddress)
+    function getTotalCollateralInUsd()
         external
-        returns (uint256)
-    {
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
+        returns (uint256) {
         address[] memory markets = comptroller.getAssetsIn(address(this));
         uint256 totalCollateral = 0;
         for (uint256 i = 0; i < markets.length; i++) {
@@ -485,11 +429,10 @@ contract CompoundMiddleContract is Helpers {
         return totalCollateral; //  this value has actually been scaled by 1e36
     }
 
-    function getTotalDebtInUsd(address _comptrollerAddress)
+    function getTotalDebtInUsd()
         external
         returns (uint256)
     {
-        Comptroller comptroller = Comptroller(_comptrollerAddress);
         address[] memory markets = comptroller.getAssetsIn(address(this));
         uint256 totalDebt = 0;
         for (uint256 i = 0; i < markets.length; i++) {
