@@ -7,8 +7,9 @@ import "./interface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Helpers } from "./helpers.sol";
+import { Events } from "./events.sol";
 
-contract CompoundMiddleContract is Helpers {
+contract CompoundMiddleContract is Helpers, Events {
     using SafeERC20 for IERC20;
 
     address private owner; // required to send the received eth back to the user
@@ -36,7 +37,7 @@ contract CompoundMiddleContract is Helpers {
         address _tokenAddress, 
         address payable _cTokenAddress, 
         uint256 _amount
-    ) public payable {
+    ) public payable returns (string memory _eventName, bytes memory _eventParam) {
         // create reference to cEther contract in Compound
         // msg.value is the amount of ether send to the contract from the wallet when this function was called
         if(_tokenAddress == ethAddr){
@@ -60,6 +61,9 @@ contract CompoundMiddleContract is Helpers {
         }
 
         enterMarket(_cTokenAddress);
+
+        _eventName = "LogDeposit(address,address,uint256)";
+        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _amount);
     }
 
     /**
@@ -73,7 +77,7 @@ contract CompoundMiddleContract is Helpers {
         uint256 _redeemAmount, 
         address _cTokenAddress, 
         address _tokenAddress
-    ) external {
+    ) external returns (string memory _eventName, bytes memory _eventParam) {
         if(_tokenAddress == ethAddr) {
             require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
@@ -100,6 +104,9 @@ contract CompoundMiddleContract is Helpers {
             // transfer erc20 tokens back to user
             token.safeTransfer(msg.sender, token.balanceOf(address(this)));
         }
+
+        _eventName = "LogWithdraw(address,address,uint256)";
+        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _redeemAmount);
     }
 
     /**
@@ -112,7 +119,7 @@ contract CompoundMiddleContract is Helpers {
         address _tokenAddress,
         address _cTokenAddress,
         uint256 _amountToBorrow
-    ) external {
+    ) external returns (string memory _eventName, bytes memory _eventParam) {
         checkCollateral(_cTokenAddress, _amountToBorrow);
 
         if(_tokenAddress == ethAddr) {
@@ -135,6 +142,9 @@ contract CompoundMiddleContract is Helpers {
             // transfer borrowed erc20 to user
             token.safeTransfer(owner, _amountToBorrow);
         }
+        
+        _eventName = "LogBorrow(address,address,uint256)";
+        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _amountToBorrow);
     }
 
     /**
@@ -147,7 +157,7 @@ contract CompoundMiddleContract is Helpers {
         address _cTokenAddress, 
         address _tokenAddress,
         uint256 _repayAmount
-    ) external payable {
+    ) external payable returns (string memory _eventName, bytes memory _eventParam) {
         if(_tokenAddress == ethAddr) {
             require(_repayAmount == msg.value, "INCORRECT AMOUNT OF ETHER SENT");
             // CHECK: IF msg.value ETH WAS EVEN BORROWED 
@@ -174,6 +184,9 @@ contract CompoundMiddleContract is Helpers {
             // repay borrow
             require(cToken.repayBorrow(_repayAmount) == 0, "REPAY FAILED");
         }
+
+        _eventName = "LogRepay(address,address,uint256)";
+        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _repayAmount);
     }
 
     /**
@@ -186,7 +199,7 @@ contract CompoundMiddleContract is Helpers {
         address payable _cTokenAddress,
         address _tokenToLeverageAddress,
         uint256 _leverageAmount
-    ) payable external {
+    ) payable external returns (string memory _eventName, bytes memory _eventParam) {
 
         if(_tokenToLeverageAddress == ethAddr){
             require(msg.value == _leverageAmount, "INCORRECT AMOUNT OF ETHER SENT");
@@ -210,6 +223,9 @@ contract CompoundMiddleContract is Helpers {
             // deposit borrowed erc20 to Compound again
             deposit(_tokenToLeverageAddress, _cTokenAddress, amountToBorrow);
         }
+
+        _eventName = "LogLeverage(address,address,uint256)";
+        _eventParam = abi.encode(_tokenToLeverageAddress, _cTokenAddress, _leverageAmount);
     }
 
     /**
