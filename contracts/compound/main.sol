@@ -28,18 +28,17 @@ contract CompoundMiddleContract is Helpers, Events {
     }
 
     /**
-     * @dev deposits tokens/ETH to Compound protocol
+     * @notice deposits tokens/ETH to Compound protocol
+     * @dev uses mint() function in Compound protocol, uses ethAddr for ether deposits
      * @param _tokenAddress address of the token which is to be deposited (ethAddr for ETH deposits)
      * @param _cTokenAddress address of the cToken contract of the token Compound
-     * @param _amount number of tokens/ETH (in Wei) to deposit
+     * @param _amount number of tokens/ETH (in Wei) to deposit, uint(-1) for max. amount
     */
     function deposit(
         address _tokenAddress, 
         address payable _cTokenAddress, 
         uint256 _amount
     ) public payable returns (string memory _eventName, bytes memory _eventParam) {
-        // create reference to cEther contract in Compound
-        // msg.value is the amount of ether send to the contract from the wallet when this function was called
         if(_tokenAddress == ethAddr){
             cEth.mint{value: _amount, gas: 250000}(); // no return, will revert on error
             console.log("Supplied %s wei to Compound via smart contract",_amount);
@@ -50,8 +49,8 @@ contract CompoundMiddleContract is Helpers, Events {
             CErc20 cToken = CErc20(_cTokenAddress);
 
             token.safeTransferFrom(owner, address(this), _amount);
+            
             // Approve transfer on the ERC20 contract
-
             token.safeApprove(_cTokenAddress, _amount);
 
             // supply the tokens to Compound and mint cTokens
@@ -67,12 +66,12 @@ contract CompoundMiddleContract is Helpers, Events {
     }
 
     /**
-     * @dev withdraws ether deposited to compound
-            uses redeem() and redeemUnderlying() methods in CEth contract
+     * @notice withdraws tokens deposited to compound by taking amount of cTokens to be redeemed as input
+     * @dev uses redeem() function in Compound contract
      * @param _redeemAmount the number of cTokens to be redeemed
      * @param _cTokenAddress address of cToken contract on Compound
      * @param _tokenAddress address of ERC20 token to be withdrawn (ethAddr for ETH withdrawals)
-     */
+    */
     function withdraw(
         uint256 _redeemAmount, 
         address _cTokenAddress, 
@@ -110,10 +109,11 @@ contract CompoundMiddleContract is Helpers, Events {
     }
 
     /**
-     * @dev borrows Eth from Compound keeping another token as collateral
+     * @notice borrows tokens/ETH from Compound using deposits as collateral
+     * @dev uses all current deposits as collateral (to calculate liquidity), updates ethBorrowBalance after borrow
      * @param _tokenAddress address of token to borrow (ethAddr for ETH borrows)
      * @param _cTokenAddress address of cToken contract for the token being borrowed
-     * @param _amountToBorrow amount of ether to be borrowed in wei
+     * @param _amountToBorrow amount to be borrowed
     */
     function borrow(
         address _tokenAddress,
@@ -148,7 +148,8 @@ contract CompoundMiddleContract is Helpers, Events {
     }
 
     /**
-     * @dev repays borrowed eth
+     * @notice repays borrowed tokens
+     * @dev updates ethBorrowBalance
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _tokenAddress address of token contract (ethAddr for ETH)
      * @param _repayAmount amount of token to be repayed
@@ -190,7 +191,8 @@ contract CompoundMiddleContract is Helpers, Events {
     }
 
     /**
-     * @dev borrows tokens from Compound keeping previously deposited tokens as collateral, used by Leverage contract
+     * @notice leverages tokens by depositing them, and borrowing against the deposit and finally depositing again
+     * @notice makes use of deposit and borrow functions of the contract
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _tokenToLeverageAddress address to token/ETH to be leveraged 
      * @param _leverageAmount amount token/ETH (in Wei) to be leveraged
