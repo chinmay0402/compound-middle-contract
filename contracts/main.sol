@@ -180,29 +180,35 @@ contract CompoundMiddleContract is Helpers {
      * @dev borrows tokens from Compound keeping previously deposited tokens as collateral, used by Leverage contract
      * @param _cTokenAddress address of the cToken contract in Compound
      * @param _tokenToLeverageAddress address to token/ETH to be leveraged 
-     * @param _amountToBorrow amount token/ETH (in Wei) to be borrowed
+     * @param _leverageAmount amount token/ETH (in Wei) to be leveraged
     */
     function leverage(
         address payable _cTokenAddress,
         address _tokenToLeverageAddress,
-        uint256 _amountToBorrow
-    ) external {
-        checkCollateral(_cTokenAddress, _amountToBorrow);
+        uint256 _leverageAmount
+    ) payable external {
 
         if(_tokenToLeverageAddress == ethAddr){
-            require(cEth.borrow(_amountToBorrow) == 0, "BORROW FAILED");
+            require(msg.value == _leverageAmount, "INCORRECT AMOUNT OF ETHER SENT");
+            deposit(ethAddr, _cTokenAddress, msg.value);    
+            uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _leverageAmount);
+            checkCollateral(_cTokenAddress, amountToBorrow);
+            require(cEth.borrow(amountToBorrow) == 0, "BORROW FAILED");
 
             // deposit borrowed ETH again
-            deposit(ethAddr, _cTokenAddress, _amountToBorrow);
+            deposit(ethAddr, _cTokenAddress, amountToBorrow);
         }
         else{
+            deposit(_tokenToLeverageAddress, payable(_cTokenAddress), _leverageAmount);
+            uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _leverageAmount);
+            checkCollateral(_cTokenAddress, amountToBorrow);
             CErc20 cToken = CErc20(_cTokenAddress);
 
             // borrow
-            require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
+            require(cToken.borrow(amountToBorrow) == 0, "BORROW FAILED");
 
             // deposit borrowed erc20 to Compound again
-            deposit(_tokenToLeverageAddress, _cTokenAddress, _amountToBorrow);
+            deposit(_tokenToLeverageAddress, _cTokenAddress, amountToBorrow);
         }
     }
 

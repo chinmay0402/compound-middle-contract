@@ -75,4 +75,13 @@ contract Helpers {
         console.log("Total Debt in USD (scaled up by 10^36): ", totalDebt);
         return totalDebt; //  this value has actually been scaled by 1e36
     }
+
+    function getMaxBorrowableAmount(
+        address _cTokenAddress, 
+        uint256 _leverageAmount
+    ) internal view returns (uint256) {
+        (, uint collateralFactorMantissa, ) = comptroller.markets(_cTokenAddress);
+        uint256 borrowableAmount = (collateralFactorMantissa - (1*(10**17))) * _leverageAmount / 10**18;
+        return borrowableAmount;
+    }
 }

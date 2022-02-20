@@ -249,12 +249,8 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
     });
 
     describe('Create Leveraged Ether Position', async () => {
-        beforeEach(async () => {
-            const leverageContractFactory = await ethers.getContractFactory("Leverage");
-            leverage = await leverageContractFactory.deploy();
-        })
         it('Should create a leveraged ETH position', async () => {
-            await leverage.leverageEther(cEtherAddress, contractConnector.address, {
+            await contractConnector.leverage(cEtherAddress, ethAddr, parseEther('1'), {
                 value: parseEther('1')
             });
         })
@@ -269,11 +265,9 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
             await BAT.connect(owner).approve(contractConnector.address, parseUnits("2", 18));
 
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
-            const leverageContractFactory = await ethers.getContractFactory("Leverage");
-            leverage = await leverageContractFactory.deploy();
         });
         it('Should create a leveraged ERC20 position', async () => {
-            await leverage.leverageERC20(cBATAddress, contractConnector.address, BATAddress, parseUnits('1', 18));
+            await contractConnector.leverage(cBATAddress, BATAddress, parseUnits('1', 18));
         })
     });
 });
