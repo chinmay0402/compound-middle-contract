@@ -31,7 +31,7 @@ contract CompoundMiddleContract is Helpers {
      * @param _tokenAddress address of the token which is to be deposited (ethAddr for ETH deposits)
      * @param _cTokenAddress address of the cToken contract of the token Compound
      * @param _amount number of tokens/ETH (in Wei) to deposit
-     */
+    */
     function deposit(
         address _tokenAddress, 
         address payable _cTokenAddress, 
@@ -176,61 +176,42 @@ contract CompoundMiddleContract is Helpers {
         }
     }
 
-
     /**
-     * @dev borrows Eth from Compound keeping another eth as collateral, used by Leverage contract
-     * @param _cEtherAddress address of the cEther contract in Compound
-     * @param _amountToBorrowInWei amount of ether to be borrowed in wei
-     * @return uint256 the current borrow balance of the user
-     */
-    function _leverageEth(
-        address payable _cEtherAddress,
-        uint256 _amountToBorrowInWei
-    ) external returns (uint256) {
-        checkCollateral(cEtherAddress, _amountToBorrowInWei);
-
-        require(cEth.borrow(_amountToBorrowInWei) == 0, "BORROW FAILED");
-
-        console.log("Borrowed %s wei", _amountToBorrowInWei);
-
-        uint256 borrowBalance = cEth.borrowBalanceCurrent(address(this));
-
-        // send ether to Leverage contract
-        // (bool success, ) = _leverageContractAddress.call{ value: address(this).balance }("");
-        // require(success, "FAILURE IN SENDING ETHER TO LEVERAGE CONTRACT");
-        deposit(ethAddr, _cEtherAddress, address(this).balance);
-
-        return borrowBalance;
-    }
-
-    /**
-     * @dev borrows erc20 token with the same token as collateral (used for leveraging)
-     * @param _cTokenAddress address of cToken contract in Compound (which is to be lleveraged)
-     * @param _erc20ToLeverageAddress address of erc20 token contract
-     * @param _amountToBorrow amount of erc20 tokens to borrow
-     * @return uint256 borrowBalance of the user
-     */
-    function _leverageErc20(
-        address _cTokenAddress,
-        address _erc20ToLeverageAddress,
+     * @dev borrows tokens from Compound keeping previously deposited tokens as collateral, used by Leverage contract
+     * @param _cTokenAddress address of the cToken contract in Compound
+     * @param _tokenToLeverageAddress address to token/ETH to be leveraged 
+     * @param _amountToBorrow amount token/ETH (in Wei) to be borrowed
+    */
+    function leverage(
+        address payable _cTokenAddress,
+        address _tokenToLeverageAddress,
         uint256 _amountToBorrow
-    ) external returns (uint256) {
-        // Create references to Compound and Token contracts
-        CErc20 cToken = CErc20(_cTokenAddress);
-        
+    ) external {
         checkCollateral(_cTokenAddress, _amountToBorrow);
 
-        // borrow
-        require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
+        if(_tokenToLeverageAddress == ethAddr){
+            require(cEth.borrow(_amountToBorrow) == 0, "BORROW FAILED");
 
-        // transfer borrowed erc20 to user
-        deposit(_erc20ToLeverageAddress, payable(_cTokenAddress), _amountToBorrow);
+            // deposit borrowed ETH again
+            deposit(ethAddr, _cTokenAddress, _amountToBorrow);
+        }
+        else{
+            CErc20 cToken = CErc20(_cTokenAddress);
 
-        return cToken.borrowBalanceCurrent(address(this));
+            // borrow
+            require(cToken.borrow(_amountToBorrow) == 0, "BORROW FAILED");
+
+            // deposit borrowed erc20 to Compound again
+            deposit(_tokenToLeverageAddress, _cTokenAddress, _amountToBorrow);
+        }
     }
 
     /**
      *@dev fallback function to accept ether when borrowEth is called and send the eth back to owner
     */
     receive() external payable {}
+}
+
+contract ConnectV2Compound is CompoundMiddleContract {
+    string constant public name = "Compound-v2"; 
 }

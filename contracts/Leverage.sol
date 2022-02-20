@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
 import "./interface.sol";
-import "./CompoundMiddleContract.sol";
+import "./main.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Helpers } from "./helpers.sol";
@@ -32,7 +32,7 @@ contract Leverage is Helpers {
         uint256 borrowableEthAmount = (collateralFactorMantissa - (1*(10**17))) * supplyEth / 10**18;
         console.log("collateralFactorMantissa: ", (collateralFactorMantissa - (1*(10**17))));
         // borrow the amount
-        middle._leverageEth(_cEtherAddress, borrowableEthAmount);
+        middle.leverage(_cEtherAddress, ethAddr, borrowableEthAmount);
 
         totalCollateral = middle.getTotalCollateralInUsd();
         totalDebt = middle.getTotalDebtInUsd();
@@ -62,8 +62,8 @@ contract Leverage is Helpers {
         uint256 erc20BorrowAmount = (collateralFactorMantissa - 1*(10**17)) * _depositAmount / 10**18; 
         // borrow amount has been kept a little less than max. allowed to prevent immediate liquidity
         
-        // borrow the amount
-        middle._leverageErc20(_cTokenAddress, _erc20Address, erc20BorrowAmount);
+        // borrow the amount and leverage
+        middle.leverage(payable(_cTokenAddress), _erc20Address, erc20BorrowAmount);
 
         totalCollateral = middle.getTotalCollateralInUsd();
         totalDebt = middle.getTotalDebtInUsd();
