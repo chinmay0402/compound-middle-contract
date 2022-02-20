@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import "hardhat/console.sol";
 import "./interface.sol";
@@ -40,6 +40,10 @@ contract CompoundMiddleContract is Helpers, Events {
         uint256 _amount
     ) public payable returns (string memory _eventName, bytes memory _eventParam) {
         if(_tokenAddress == ethAddr){
+            if(_amount == type(uint).max) _amount = msg.sender.balance;
+            
+            require(_amount == address(this).balance, "INCORRECT AMOUNT OF ETHER SENT");
+
             cEth.mint{value: _amount, gas: 250000}(); // no return, will revert on error
             console.log("Supplied %s wei to Compound via smart contract",_amount);
             console.log("Total ether deposits: ", cEth.balanceOfUnderlying(address(this)));
@@ -48,6 +52,9 @@ contract CompoundMiddleContract is Helpers, Events {
             IERC20 token = IERC20(_tokenAddress);
             CErc20 cToken = CErc20(_cTokenAddress);
 
+            if(_amount == type(uint).max) _amount = token.balanceOf(msg.sender);
+
+            require(token.allowance(msg.sender, address(this)) >= _amount, "INSUFFICIENT ALLOWANCE");
             token.safeTransferFrom(owner, address(this), _amount);
             
             // Approve transfer on the ERC20 contract
@@ -78,6 +85,9 @@ contract CompoundMiddleContract is Helpers, Events {
         address _tokenAddress
     ) external returns (string memory _eventName, bytes memory _eventParam) {
         if(_tokenAddress == ethAddr) {
+            if(_redeemAmount == type(uint).max){
+                _redeemAmount = cEth.balanceOf(address(this));
+            }
             require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
             require(cEth.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING"); // redeem tokens
@@ -95,6 +105,9 @@ contract CompoundMiddleContract is Helpers, Events {
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
             IERC20 token = IERC20(_tokenAddress);
+            if(_redeemAmount == type(uint).max){
+                _redeemAmount = cToken.balanceOf(address(this));
+            }
 
             require(cToken.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
 
@@ -160,6 +173,9 @@ contract CompoundMiddleContract is Helpers, Events {
         uint256 _repayAmount
     ) external payable returns (string memory _eventName, bytes memory _eventParam) {
         if(_tokenAddress == ethAddr) {
+            
+            if(_repayAmount == type(uint).max)_repayAmount = cEth.borrowBalanceCurrent(address(this)); 
+        
             require(_repayAmount == msg.value, "INCORRECT AMOUNT OF ETHER SENT");
             // CHECK: IF msg.value ETH WAS EVEN BORROWED 
             ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
@@ -172,6 +188,8 @@ contract CompoundMiddleContract is Helpers, Events {
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
             IERC20 token = IERC20(_tokenAddress);
+
+            if(_repayAmount == type(uint).max)_repayAmount = cToken.borrowBalanceCurrent(address(this));
 
             // transfer user's tokens to contract
             token.safeTransferFrom(msg.sender, address(this), _repayAmount);
@@ -202,10 +220,11 @@ contract CompoundMiddleContract is Helpers, Events {
         address _tokenToLeverageAddress,
         uint256 _leverageAmount
     ) payable external returns (string memory _eventName, bytes memory _eventParam) {
-
         if(_tokenToLeverageAddress == ethAddr){
-            require(msg.value == _leverageAmount, "INCORRECT AMOUNT OF ETHER SENT");
-            deposit(ethAddr, _cTokenAddress, msg.value);    
+            if(_leverageAmount == type(uint).max) _leverageAmount = msg.sender.balance;
+            require(_leverageAmount == address(this).balance, "INCORRECT AMOUNT OF ETHER SENT");
+
+            deposit(ethAddr, _cTokenAddress, msg.value);
             uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _leverageAmount);
             checkCollateral(_cTokenAddress, amountToBorrow);
             require(cEth.borrow(amountToBorrow) == 0, "BORROW FAILED");
@@ -214,6 +233,10 @@ contract CompoundMiddleContract is Helpers, Events {
             deposit(ethAddr, _cTokenAddress, amountToBorrow);
         }
         else{
+            IERC20 token = IERC20(_tokenToLeverageAddress);
+            
+            if(_leverageAmount == type(uint).max) _leverageAmount = token.balanceOf(msg.sender);
+
             deposit(_tokenToLeverageAddress, payable(_cTokenAddress), _leverageAmount);
             uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _leverageAmount);
             checkCollateral(_cTokenAddress, amountToBorrow);
