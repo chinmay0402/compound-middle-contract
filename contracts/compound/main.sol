@@ -46,9 +46,7 @@ contract CompoundMiddleContract is Helpers, Events {
         uint _amount = getUint(getId, _amt);
 
         if(_tokenAddress == ethAddr){
-            if(_amount == type(uint).max) _amount = msg.sender.balance;
-            
-            require(_amount == address(this).balance, "INCORRECT AMOUNT OF ETHER SENT");
+            if(_amount == type(uint).max) _amount = address(this).balance;
 
             cEth.mint{value: _amount}(); // no return, will revert on error
             console.log("Supplied %s wei to Compound via smart contract",_amount);
@@ -58,10 +56,7 @@ contract CompoundMiddleContract is Helpers, Events {
             IERC20 token = IERC20(_tokenAddress);
             CErc20 cToken = CErc20(_cTokenAddress);
 
-            if(_amount == type(uint).max) _amount = token.balanceOf(msg.sender);
-
-            require(token.allowance(msg.sender, address(this)) >= _amount, "INSUFFICIENT ALLOWANCE");
-            token.safeTransferFrom(owner, address(this), _amount);
+            if(_amount == type(uint).max) _amount = token.balanceOf(address(this));
             
             // Approve transfer on the ERC20 contract
             token.safeApprove(_cTokenAddress, _amount);
@@ -98,9 +93,8 @@ contract CompoundMiddleContract is Helpers, Events {
         uint256 _amt = getUint(getId, _cTokenAmount);
         uint withdrawAmount = 0;
         if(_tokenAddress == ethAddr) {
-            if(_amt == type(uint).max){
-                _amt = cEth.balanceOf(address(this));
-            }
+            if(_amt == type(uint).max)_amt = cEth.balanceOf(address(this));
+
             require(cEth.balanceOf(address(this)) >= _amt, "INSUFFICIENT cTOKEN BALANCE");
 
             uint initialAmount = address(this).balance;
@@ -112,13 +106,6 @@ contract CompoundMiddleContract is Helpers, Events {
 
             uint256 amountOfEthreceived = _amt * cEth.exchangeRateCurrent();
             console.log("Redeemed %s cEth for %s wei", _amt, amountOfEthreceived);
-
-            // send recieved eth back to user
-            (bool success, ) = owner.call{value: withdrawAmount}(""); // prefer call() instead of transfer()
-            // transfer() and send() were the functions used earlier, but they forward fixed gas stipends (2300)
-            // there have been some breaking changes since then and assuming fixed gas costs is no longer feasible
-            // so, call() is the correct way to send funds these days
-            require(success, "FAILURE IN SENDING ETHER TO USER");
         }
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
@@ -135,8 +122,6 @@ contract CompoundMiddleContract is Helpers, Events {
 
             uint finalAmount = token.balanceOf(address(this));
             withdrawAmount = finalAmount - initialAmount;
-            // transfer erc20 tokens back to user
-            token.safeTransfer(msg.sender, withdrawAmount);
         }
         setUint(setId, withdrawAmount);
         _eventName = "LogWithdraw(address,address,uint256)";
@@ -163,24 +148,15 @@ contract CompoundMiddleContract is Helpers, Events {
         checkCollateral(_cTokenAddress, _amt);
 
         if(_tokenAddress == ethAddr) {
-
             require(cEth.borrow(_amt) == 0, "BORROW FAILED");
 
             console.log("Borrowed %s wei", _amt);
-
-            (bool success, ) = owner.call{value: _amt}("");
-            require(success, "FAILURE IN SENDING ETHER TO USER");
             ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
         }
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
-            IERC20 token = IERC20(_tokenAddress);
-            
             // borrow
             require(cToken.borrow(_amt) == 0, "BORROW FAILED");
-
-            // transfer borrowed erc20 to user
-            token.safeTransfer(owner, _amt);
         }
 
         setUint(setId, _amt);
@@ -209,12 +185,12 @@ contract CompoundMiddleContract is Helpers, Events {
             
             if(_amt == type(uint).max)_amt = cEth.borrowBalanceCurrent(address(this)); 
         
-            require(_amt == msg.value, "INCORRECT AMOUNT OF ETHER SENT");
             // CHECK: IF msg.value ETH WAS EVEN BORROWED 
             ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
             require(_amt <= ethBorrowBalance,"REPAY AMOUNT MORE THAN BORROWED AMOUNT");
             
-            cEth.repayBorrow{value: msg.value}();
+            cEth.repayBorrow{value: _repayAmount}();
+
             console.log("Repayed %s wei", msg.value);
             ethBorrowBalance = cEth.borrowBalanceCurrent(address(this));
         }
@@ -224,10 +200,6 @@ contract CompoundMiddleContract is Helpers, Events {
 
             if(_amt == type(uint).max)_amt = cToken.borrowBalanceCurrent(address(this));
 
-            // transfer user's tokens to contract
-            token.safeTransferFrom(msg.sender, address(this), _amt);
-
-            // approve Compound to spend erc20 tokens
             token.safeApprove(_cTokenAddress, _amt);
 
             // CHECK: IF USER HAS A BORROWBALANCE OF MORE THAN _repayAmount ON THIS TOKEN
@@ -256,24 +228,23 @@ contract CompoundMiddleContract is Helpers, Events {
         uint256 _leverageAmount,
         uint256 getId,
         uint256 setId
-    ) payable external returns (string memory _eventName, bytes memory _eventParam) {
+    ) payable external returns (string memory _eventName, bytes memory _eventParam) {  
         uint _amt = getUint(getId, _leverageAmount);
         if(_tokenToLeverageAddress == ethAddr){
-            if(_amt == type(uint).max) _amt = msg.sender.balance;
-            require(_amt == address(this).balance, "INCORRECT AMOUNT OF ETHER SENT");
+            if(_amt == type(uint).max) _amt = address(this).balance;
 
-            deposit(ethAddr, _cTokenAddress, msg.value, 0, 0);
+            this.deposit{value: _amt}(ethAddr, _cTokenAddress, _amt, 0, 0);
             uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _amt);
             checkCollateral(_cTokenAddress, amountToBorrow);
             require(cEth.borrow(amountToBorrow) == 0, "BORROW FAILED");
 
             // deposit borrowed ETH again
-            deposit(ethAddr, _cTokenAddress, amountToBorrow, 0, 0);
+            this.deposit{value: amountToBorrow}(ethAddr, _cTokenAddress, amountToBorrow, 0, 0);
         }
         else{
             IERC20 token = IERC20(_tokenToLeverageAddress);
             
-            if(_amt == type(uint).max) _amt = token.balanceOf(msg.sender);
+            if(_amt == type(uint).max) _amt = token.balanceOf(address(this));
 
             deposit(_tokenToLeverageAddress, payable(_cTokenAddress), _amt, 0, 0);
             uint256 amountToBorrow = getMaxBorrowableAmount(_cTokenAddress, _amt);
