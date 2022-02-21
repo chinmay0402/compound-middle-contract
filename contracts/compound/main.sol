@@ -82,32 +82,39 @@ contract CompoundMiddleContract is Helpers, Events {
     /**
      * @notice withdraws tokens deposited to compound by taking amount of cTokens to be redeemed as input
      * @dev uses redeem() function in Compound contract
-     * @param _redeemAmount the number of cTokens to be redeemed
+     * @param _cTokenAmount the number of cTokens to be redeemed
      * @param _cTokenAddress address of cToken contract on Compound
      * @param _tokenAddress address of ERC20 token to be withdrawn (ethAddr for ETH withdrawals)
      * @param getId ID to retrieve amt.
      * @param setId ID stores the amount of tokens deposited.
     */
     function withdraw(
-        uint256 _redeemAmount, 
+        uint256 _cTokenAmount, 
         address _cTokenAddress, 
         address _tokenAddress,
         uint256 getId,
         uint256 setId
     ) external returns (string memory _eventName, bytes memory _eventParam) {
+        uint256 _amt = getUint(getId, _cTokenAmount);
+        uint withdrawAmount = 0;
         if(_tokenAddress == ethAddr) {
-            if(_redeemAmount == type(uint).max){
-                _redeemAmount = cEth.balanceOf(address(this));
+            if(_amt == type(uint).max){
+                _amt = cEth.balanceOf(address(this));
             }
-            require(cEth.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
+            require(cEth.balanceOf(address(this)) >= _amt, "INSUFFICIENT cTOKEN BALANCE");
 
-            require(cEth.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING"); // redeem tokens
+            uint initialAmount = address(this).balance;
 
-            uint256 amountOfEthreceived = _redeemAmount * cEth.exchangeRateCurrent();
-            console.log("Redeemed %s cEth for %s wei", _redeemAmount, amountOfEthreceived);
+            require(cEth.redeem(_amt) == 0, "ERROR WHILE REDEEMING"); // redeem tokens
+
+            uint finalAmount = address(this).balance;
+            withdrawAmount = finalAmount - initialAmount;
+
+            uint256 amountOfEthreceived = _amt * cEth.exchangeRateCurrent();
+            console.log("Redeemed %s cEth for %s wei", _amt, amountOfEthreceived);
 
             // send recieved eth back to user
-            (bool success, ) = owner.call{value: address(this).balance}(""); // prefer call() instead of transfer()
+            (bool success, ) = owner.call{value: withdrawAmount}(""); // prefer call() instead of transfer()
             // transfer() and send() were the functions used earlier, but they forward fixed gas stipends (2300)
             // there have been some breaking changes since then and assuming fixed gas costs is no longer feasible
             // so, call() is the correct way to send funds these days
@@ -116,20 +123,24 @@ contract CompoundMiddleContract is Helpers, Events {
         else{
             CErc20 cToken = CErc20(_cTokenAddress);
             IERC20 token = IERC20(_tokenAddress);
-            if(_redeemAmount == type(uint).max){
-                _redeemAmount = cToken.balanceOf(address(this));
+            if(_amt == type(uint).max){
+                _amt = cToken.balanceOf(address(this));
             }
 
-            require(cToken.balanceOf(address(this)) >= _redeemAmount, "INSUFFICIENT cTOKEN BALANCE");
+            require(cToken.balanceOf(address(this)) >= _amt, "INSUFFICIENT cTOKEN BALANCE");
 
-            require(cToken.redeem(_redeemAmount) == 0, "ERROR WHILE REDEEMING");
+            uint initialAmount = token.balanceOf(address(this));
 
+            require(cToken.redeem(_amt) == 0, "ERROR WHILE REDEEMING");
+
+            uint finalAmount = token.balanceOf(address(this));
+            withdrawAmount = finalAmount - initialAmount;
             // transfer erc20 tokens back to user
-            token.safeTransfer(msg.sender, token.balanceOf(address(this)));
+            token.safeTransfer(msg.sender, withdrawAmount);
         }
-
+        setUint(setId, withdrawAmount);
         _eventName = "LogWithdraw(address,address,uint256)";
-        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _redeemAmount);
+        _eventParam = abi.encode(_tokenAddress, _cTokenAddress, _amt);
     }
 
     /**
