@@ -6,12 +6,12 @@ import "hardhat/console.sol";
 import "./interface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Stores } from "../common/stores.sol";
 
-contract Helpers {
+contract Helpers is Stores {
 
     address constant internal comptrollerAddress = 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B;
     address constant internal cEtherAddress = 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
-    address constant internal ethAddr = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address constant internal uniswapAnchorViewAddress = 0x046728da7cb8272284238bD3e47909823d63A58D;
 
     Comptroller internal comptroller = Comptroller(comptrollerAddress);

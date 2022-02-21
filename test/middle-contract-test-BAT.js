@@ -35,14 +35,14 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
 
     describe('Deposit Ether', async () => {
         it('Should deposit ether in Compound', async () => {
-            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), {
+            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), 0, 0, {
                 value: parseEther("1")
             })
             ).to.changeEtherBalances(
                 [owner], [parseEther("-1")]
             )
 
-            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('2'), {
+            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('2'), 0, 0, {
                 value: parseEther("2")
             })
             ).to.changeEtherBalances(
@@ -53,7 +53,7 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
 
     describe('Withdraw Ether', async () => {
         beforeEach(async () => {
-            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('3'), {
+            await expect(await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('3'), 0, 0, {
                 value: parseEther("3")
             }));
         })
@@ -62,7 +62,9 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
                 await expect(await contractConnector.withdraw(
                     4985102208,
                     cEtherAddress,
-                    ethAddr
+                    ethAddr,
+                    0,
+                    0
                 )).to.changeEtherBalances(
                     // parseEther is >1 to take interest into account
                     [owner], [parseEther('1.000000002122365176')] // change to something better later
@@ -75,7 +77,9 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
                 await expect(contractConnector.withdraw(
                     19940408832,
                     cEtherAddress,
-                    ethAddr
+                    ethAddr,
+                    0,
+                    0
                 )).to.be.revertedWith("INSUFFICIENT cTOKEN BALANCE");
             })
         });
@@ -94,21 +98,21 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
         });
 
         it('Should fail on attempting to borrow more than liquidity', async () => {
-            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
+            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18), 0, 0))
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // debug later for the BORROW FAILED (COMPTROLLER_REJECTED) thing
-            await expect(contractConnector.borrow(ethAddr, cEtherAddress, parseEther('1000')))
+            await expect(contractConnector.borrow(ethAddr, cEtherAddress, parseEther('1000'), 0, 0))
                 .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
         it('Should disburse loan amount', async () => {
-            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18)))
+            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.000001", 18), 0, 0))
                 .to.changeTokenBalance(BAT, cBAT, parseUnits("0.000001", 18));
 
             // call borrow
             // Note: Getting COMPTROLLER_REJECTED error with BORROW FAILED on increasing borrow amount even though liquidity was enough (debug later)
-            await expect(await contractConnector.borrow(ethAddr, cEtherAddress, parseEther('0.0000000001')))
+            await expect(await contractConnector.borrow(ethAddr, cEtherAddress, parseEther('0.0000000001'), 0, 0))
                 .to.changeEtherBalances(
                     [owner], [parseEther('0.0000000001')]
                 ); //  the ether balance of the user should increase after borrowed amount get transferred
@@ -125,22 +129,22 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit collateral
-            await contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.01", 18));
+            await contractConnector.deposit(BATAddress, cBATAddress, parseUnits("0.01", 18), 0, 0);
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
 
             // borrow eth
-            await contractConnector.borrow(ethAddr, cEtherAddress, parseEther('0.000001'));
+            await contractConnector.borrow(ethAddr, cEtherAddress, parseEther('0.000001'), 0, 0);
             // console.log("Owner's balance: ", await ethers.provider.getBalance(owner.address));
         });
 
         it('Should fail on attempting to repay more than borrowed', async () => {
-            await expect(contractConnector.repay(cEtherAddress, ethAddr, parseEther('1000'), {
+            await expect(contractConnector.repay(cEtherAddress, ethAddr, parseEther('1000'), 0, 0, {
                 value: parseEther('1000')
             })).to.be.revertedWith("REPAY AMOUNT MORE THAN BORROWED AMOUNT");
         })
 
         it('Should repay amount and update borrowBalanceCurrent', async () => {
-            await contractConnector.repay(cEtherAddress, ethAddr, parseEther('0.000001000000011800'), {
+            await contractConnector.repay(cEtherAddress, ethAddr, parseEther('0.000001000000011800'), 0, 0, {
                 value: parseEther('0.000001000000011800')
             });
 
@@ -160,7 +164,7 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
         });
 
         it('Should deposit ERC20 tokens to Compound', async () => {
-            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits('100', 18)))
+            await expect(() => contractConnector.deposit(BATAddress, cBATAddress, parseUnits('100', 18), 0, 0))
                     .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 18), parseUnits('100', 18)]);
         })
     });
@@ -175,21 +179,21 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit collateral
-            await contractConnector.deposit(BATAddress, cBATAddress, parseUnits("1", 18));
+            await contractConnector.deposit(BATAddress, cBATAddress, parseUnits("1", 18), 0, 0);
         })
 
         it('Should fail on attempting to withdraw more than balance', async () => {
-            await expect(contractConnector.withdraw( 2*4576928512, cBATAddress, BATAddress))
+            await expect(contractConnector.withdraw( 2*4576928512, cBATAddress, BATAddress, 0, 0))
                     .to.be.revertedWith("INSUFFICIENT cTOKEN BALANCE");
         });
 
         it('Should update token balances on withdraw', async () => {
-            await expect(() => contractConnector.withdraw(1000, cBATAddress, BATAddress))
+            await expect(() => contractConnector.withdraw(1000, cBATAddress, BATAddress, 0, 0))
                     .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits("206623687264", 0), parseUnits("-206623687264", 0)]); // increased amount to account for interest
         });
     });
 
-    describe('Borrow ERC20 using ETH', async () => {
+    describe('Borrow ERC20', async () => {
         let BAT, cBAT;
         beforeEach(async () => {
             // seed the user's address with some BAT
@@ -200,22 +204,22 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
         });
 
         it('Should fail on trying to borrow more amount in tokens than liquidity', async () => {
-            await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('0.01'), {
+            await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('0.01'), 0, 0, {
                 value: parseEther('0.01')
             })
 
-            await expect(contractConnector.borrow(BATAddress, cBATAddress, parseUnits('1', 20)))
+            await expect(contractConnector.borrow(BATAddress, cBATAddress, parseUnits('1', 20), 0, 0))
                     .to.be.revertedWith("BORROW FAILED: NOT ENOUGH COLLATERAL");
         });
 
         it('Should disburse loan tokens', async () => {
-            await expect(() => contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), {
+            await expect(() => contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), 0, 0, {
                 value: parseEther('1')
             })).to.changeEtherBalances(
                     [owner], [parseEther("-1")]
                 )
 
-            await expect(() => contractConnector.borrow(BATAddress, cBATAddress, parseUnits('100', 0)))
+            await expect(() => contractConnector.borrow(BATAddress, cBATAddress, parseUnits('100', 0), 0, 0))
                 .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('100', 0), parseUnits('-100', 0)]);
         });
     });
@@ -229,28 +233,28 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
             
             // deposit eth as collateral
-            await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), {
+            await contractConnector.deposit(ethAddr, cEtherAddress, parseEther('1'), 0, 0, {
                 value: parseEther('1')
             });
 
             // borrow BAT
-            await contractConnector.borrow(BATAddress, cBATAddress, parseUnits('100', 0));
+            await contractConnector.borrow(BATAddress, cBATAddress, parseUnits('100', 0), 0, 0);
         });
 
         it('Should fail on trying to repay more than borrowed', async () => {
-            await expect(contractConnector.repay(cBATAddress, BATAddress, parseUnits('110', 0)))
+            await expect(contractConnector.repay(cBATAddress, BATAddress, parseUnits('110', 0), 0, 0))
                     .to.be.revertedWith("REPAY AMOUNT MORE THAN BORROWED AMOUNT");
         });
 
         it('Should repay tokens and update balances', async () => {
-            await expect(() => contractConnector.repay(cBATAddress, BATAddress, parseUnits('100', 0)))
+            await expect(() => contractConnector.repay(cBATAddress, BATAddress, parseUnits('100', 0), 0, 0))
             .to.changeTokenBalances(BAT, [owner, cBAT], [parseUnits('-100', 0), parseUnits('100', 0)]);
         });
     });
 
     describe('Create Leveraged Ether Position', async () => {
         it('Should create a leveraged ETH position', async () => {
-            await contractConnector.leverage(cEtherAddress, ethAddr, parseEther('1'), {
+            await contractConnector.leverage(cEtherAddress, ethAddr, parseEther('1'), 0, 0, {
                 value: parseEther('1')
             });
         })
@@ -267,7 +271,7 @@ describe("Compound Wrapper Contract using impersonate_account with ERC20 token a
             cBAT = new ethers.Contract(cBATAddress, cBATAbi, ethers.provider);
         });
         it('Should create a leveraged ERC20 position', async () => {
-            await contractConnector.leverage(cBATAddress, BATAddress, parseUnits('1', 18));
+            await contractConnector.leverage(cBATAddress, BATAddress, parseUnits('1', 18), 0, 0);
         })
     });
 });
